@@ -1,0 +1,11 @@
+# PyTorch is installed separately so pip picks the CUDA build (RTX 4060):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+numpy
+pandas
+soundfile
+librosa
+scikit-learn
+matplotlib
+tqdm
+jupyter
+ipykernel

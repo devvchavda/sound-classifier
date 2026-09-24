@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+
+# datasets and derived caches (re-create with scripts/download_data.py)
+data/
+
+# training runs; the chosen model gets copied out of here deliberately
+runs/
