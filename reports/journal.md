@@ -35,3 +35,18 @@ failures and their fixes. The newest entry is at the bottom.
 - Features take ~1.5 min to compute once; they are cached in `data/cache/`.
 - Speech class ready: 130 × 5 s clips from 26 LibriSpeech speakers in `data/custom/speech/`
   (Mini LibriSpeech has fewer speakers than expected; we cap at 5 clips per speaker).
+
+## 2026-09-24: Reading spectrograms (from exploring ESC-50)
+
+- **Four visual building blocks:** horizontal line = steady pitch; stacked parallel lines =
+  something with a voice/pitch (harmonics: rooster, cat, baby, siren); vertical line = click/hit
+  (clock tick, knock, keyboard); fog = noise (rain, wind, helicopter, sneeze).
+- **Some classes differ only in rhythm over time:** clock tick (regular), door knock (grouped) and
+  keyboard (random) are all vertical lines. Averaging over time throws that away, which fits the
+  baseline's failures on transient sounds.
+- **Padded silence:** short ESC-50 clips are padded with exact zeros (pure black in the
+  spectrogram). Real audio is never that silent. Watch that the CNN doesn't learn "lots of black
+  = short-event class".
+- **Open-set limitation (for the demo):** the model can only answer with classes it was trained
+  on. An unknown noise like a fan or AC hum will likely be tagged as the nearest fog-like class
+  (rain). Possible fix later: a "background noise" class in `data/custom/`.
