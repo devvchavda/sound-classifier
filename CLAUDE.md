@@ -47,11 +47,14 @@ Windows, Python 3.13, RTX 4060 (CUDA). Run everything from the repo root with th
 .venv/Scripts/python -m pip install -r requirements.txt
 .venv/Scripts/python scripts/download_data.py      # ESC-50 + speech clips -> data/ (gitignored)
 .venv/Scripts/python -m src.baseline               # MFCC + sklearn, 5-fold CV, figures -> reports/figures/
+.venv/Scripts/python -m src.models.cnn             # CNN shape check: one clip through the untrained model
+.venv/Scripts/python -m src.train --fold 5 --epochs 60   # train; run folder -> runs/ (weights, history, curves)
 .venv/Scripts/python -m jupyter notebook notebooks/ # learning notebooks (01_explore: sound -> log-mel)
 ```
 
-Baseline MFCC features are cached in `data/cache/baseline_features.npz`. Delete that file after
-changing `src/audio.py`, or the baseline will keep using stale features.
+Baseline MFCC features are cached in `data/cache/baseline_features.npz`, and the CNN's log-mel
+pictures in `data/cache/esc50_logmel.npz`. Delete both after changing `src/audio.py`, or training
+will keep using stale features.
 
 ffmpeg is not installed system-wide. Use the `imageio-ffmpeg` pip package when video audio
 extraction is needed.
