@@ -99,3 +99,16 @@ failures and their fixes. The newest entry is at the bottom.
   at lr 0.001, and each of the 400 test clips is 0.25 %. The last 10 epochs sit at 0.782–0.792
   as the cosine schedule shrinks the steps, which is the settling Decision 7 was for.
 - Figure: `runs/no_dropout/curves.png`.
+
+## 2026-09-25: Run 2, `with_dropout` (dropout 0.5 before the final layer), test fold 5
+
+- **Test accuracy 0.790 (last epoch), exactly the same as without dropout.** No measurable gain.
+  Peak was 0.805 at epoch 59, not reportable by the rule; 0.805 → 0.790 is 6 clips out of 400.
+- The blue train curve looked much less overfit (0.921 acc, 0.29 loss), but that was measured with
+  dropout switched ON. Re-measured with dropout off: **train 0.993**, test 0.790. The model still
+  memorises the training set almost perfectly. The gap is still ~20 points.
+- Why: dropout only disrupts the last layer. The conv blocks (388k of the 401k weights) still see
+  the exact same 1,600 pictures every epoch and can memorise them. That points to augmentation:
+  change the pictures every epoch so there is nothing exact to memorise.
+- Early test accuracy wobbled even more (epoch 26 dropped to ~0.55); training was slower
+  (test 0.75 at epoch 40 vs 0.78 at epoch 30 without dropout).

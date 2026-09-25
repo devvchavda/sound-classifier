@@ -1,4 +1,4 @@
-"""Our CNN, built from scratch: 4 conv blocks -> global pooling -> 50 scores.
+"""Our CNN, built from scratch: 4 conv blocks -> global pooling -> dropout -> 50 scores.
 
     python -m src.models.cnn      # shape check: one real clip through the model
 
@@ -41,7 +41,7 @@ class SoundCNN(nn.Module):
     during training and by `predict_proba` when we want probabilities.
     """
 
-    def __init__(self, n_classes: int):
+    def __init__(self, n_classes: int, dropout: float = 0.5):
         super().__init__()
         # Filters double as the picture shrinks: early blocks need a few simple
         # detectors (edges, dots); deep blocks combine them into many more kinds.
@@ -51,6 +51,11 @@ class SoundCNN(nn.Module):
             ConvBlock(64, 128),
             ConvBlock(128, 256),
         )
+        # While training, each of the 256 detector values is zeroed with
+        # probability `dropout` (a different random set every step), so no
+        # answer can hang on a fragile combination of a few detectors. Off in
+        # eval mode. dropout=0 gives back the plain model.
+        self.dropout = nn.Dropout(dropout)
         self.classifier = nn.Linear(256, n_classes)
 
     def pool(self, x: torch.Tensor) -> torch.Tensor:
@@ -65,7 +70,7 @@ class SoundCNN(nn.Module):
         return x.amax(dim=2) + x.mean(dim=2)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.classifier(self.pool(self.blocks(x)))
+        return self.classifier(self.dropout(self.pool(self.blocks(x))))
 
     @torch.no_grad()
     def predict_proba(self, x: torch.Tensor) -> torch.Tensor:

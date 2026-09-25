@@ -117,6 +117,8 @@ def main() -> None:
     parser.add_argument("--epochs", type=int, default=60)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-3, help="starting learning rate")
+    parser.add_argument("--dropout", type=float, default=0.5,
+                        help="share of the 256 detector values zeroed each step (0 = off)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--name", default=None, help="run folder name (default: fold + time)")
     args = parser.parse_args()
@@ -131,7 +133,8 @@ def main() -> None:
     print(f"normalisation from training folds: mean {norm['mean']:.2f} dB, "
           f"std {norm['std']:.2f} dB")
 
-    model = SoundCNN(n_classes=len(labels)).to(device)
+    model = SoundCNN(n_classes=len(labels), dropout=args.dropout).to(device)
+    print(f"dropout {args.dropout}")
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
     # Big steps early, smaller and smaller ones later, so it settles in the valley.
