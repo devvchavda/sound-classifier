@@ -112,3 +112,33 @@ failures and their fixes. The newest entry is at the bottom.
   change the pictures every epoch so there is nothing exact to memorise.
 - Early test accuracy wobbled even more (epoch 26 dropped to ~0.55); training was slower
   (test 0.75 at epoch 40 vs 0.78 at epoch 30 without dropout).
+
+## 2026-09-25: Web demo v1 (upload audio/video or YouTube link → probabilities)
+
+- **Sliding window:** 5 s windows (the training length), one every 1 s. Overall score = each
+  class's highest probability in any window; timeline = winning class per window.
+- **Same path as training, verified:** ffmpeg only unpacks the audio, and `audio.load` does the
+  resampling as in training (identical samples on an ESC-50 clip, max difference 0.0). Running the
+  web path over all of fold 5 gives 316/400 = **0.790**, the same number the training script reported.
+- **Test video** (25 s mp4 of five fold-5 clips: dog, rain, clock tick, rooster, siren): all five
+  are the top 5 overall. Windows that straddle two clips produce wrong labels (crow, footsteps,
+  cow): a mix of two sounds is something the single-label model never saw. That is the argument
+  for the multi-label stage.
+- **Open-set in practice:** "Me at the zoo" (YouTube, a man talking) → sheep 0.58. Speech is not
+  one of the 50 classes, and softmax has to pick one of them.
+
+## 2026-09-25: Web demo v2 (play it and watch the labels change)
+
+- **"Live" labels without live inference:** the server analyses the whole file once and now also
+  returns every 5 s slice's full prediction with its centre time. While the video/audio plays,
+  the page picks the slice nearest to `currentTime` and shows its top 5. Same model, same
+  numbers as the timeline, no GPU work during playback. This is the plan's "pre-recorded video"
+  mode; the camera/mic mode still needs real streaming.
+- **YouTube first, Shorts included:** the video is embedded with YouTube's player; only the audio
+  is downloaded for the model. A `/shorts/` link is not always a tall video (some Shorts are
+  uploaded landscape), so the player's shape comes from the video's real width and height.
+- **Layout:** one top-to-bottom flow (link → player + "now hearing" → timeline → whole-clip
+  summary → the list of the 50 sounds it knows, grouped by ESC-50's five categories). Before, the
+  answer appeared top-right while the input sat bottom-left.
+- **Bug found while testing:** the probability bars had always been empty. The coloured fill
+  was a `<span>`, and inline elements ignore `width`; `display: block` fixed it.

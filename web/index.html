@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sound tagger: what's making that sound?</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>Sound tagger</span>
+      </a>
+      <a class="status" id="status" href="#sounds">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-text">Connecting to the model…</span>
+      </a>
+    </header>
+
+    <main>
+      <!-- 1. Pick something to listen to -->
+      <section class="intro">
+        <h1>What's making that sound?</h1>
+        <p class="lede">
+          Paste a YouTube link or upload a clip, then press play. The model listens in
+          5-second slices and shows, moment by moment, which sound it thinks is playing.
+        </p>
+
+        <form class="glass input-card" id="form">
+          <div class="modes" role="tablist" aria-label="Input type">
+            <button type="button" role="tab" class="mode is-active" data-mode="url" aria-selected="true">YouTube link</button>
+            <button type="button" role="tab" class="mode" data-mode="file" aria-selected="false">Upload audio or video</button>
+          </div>
+
+          <div class="url-row" data-panel="url">
+            <label for="url" class="visually-hidden">YouTube link</label>
+            <input type="url" id="url" placeholder="https://www.youtube.com/watch?v=…  or  /shorts/…" autocomplete="off">
+            <button type="submit" class="analyze" id="analyze-url" disabled>Analyze</button>
+          </div>
+          <p class="hint" data-panel="url">Normal videos and Shorts, up to 10 minutes. Only the audio is downloaded for the model; the video plays here.</p>
+
+          <div class="file-row" data-panel="file" hidden>
+            <label class="drop" id="drop">
+              <input type="file" id="file" accept="audio/*,video/*">
+              <span class="drop-title" id="drop-title">Drop an audio or video file here</span>
+              <span class="hint" id="drop-hint">or click to choose one. mp3, wav, m4a, mp4, webm; the first 10 minutes are used.</span>
+            </label>
+            <button type="submit" class="analyze" id="analyze-file" disabled>Analyze</button>
+          </div>
+
+          <p class="error" id="error" role="alert"></p>
+        </form>
+      </section>
+
+      <!-- 2. Play it and watch the labels change -->
+      <section class="stage" id="stage" hidden>
+        <div class="glass player-card" id="player-card">
+          <p class="source" id="source"></p>
+          <div class="yt-frame" id="yt-frame" hidden><div id="yt"></div></div>
+          <p class="hint player-error" id="player-error" hidden></p>
+          <video class="media" id="video" controls playsinline hidden></video>
+          <div class="audio-player" id="audio-player" hidden>
+            <button type="button" class="play" id="play" aria-label="Play">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path class="icon-play" d="M8 5v14l11-7z"/><path class="icon-pause" d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+            </button>
+            <audio class="media" id="audio" controls></audio>
+          </div>
+        </div>
+
+        <div class="glass now-card" id="now-card" aria-live="polite">
+          <div class="listening" id="listening">
+            <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+            <p id="listening-text">Listening…</p>
+          </div>
+
+          <div id="now" hidden>
+            <p class="now-head">
+              <span class="now-title">Now hearing</span>
+              <span class="now-clock" id="now-clock">0:00</span>
+            </p>
+            <p class="now-label" id="now-label"></p>
+            <p class="now-prob"><span id="now-prob"></span> sure in this slice</p>
+            <ol class="bars live" id="now-bars"></ol>
+            <p class="hint now-hint" id="now-hint">Press play. The labels follow the audio as it plays.</p>
+          </div>
+        </div>
+
+        <div class="glass timeline-card" id="timeline-card" hidden>
+          <div class="card-head">
+            <h2>Timeline</h2>
+            <p class="hint">The top sound in each slice; brighter means more confident. Click anywhere to jump there.</p>
+          </div>
+          <div class="timeline-wrap" id="timeline-wrap">
+            <div class="timeline" id="timeline"></div>
+            <div class="playhead" id="playhead" aria-hidden="true"></div>
+          </div>
+          <div class="axis"><span>0:00</span><span id="axis-end"></span></div>
+          <details>
+            <summary>Show as a list</summary>
+            <table class="segments">
+              <thead><tr><th>From</th><th>To</th><th>Sound</th><th>Confidence</th></tr></thead>
+              <tbody id="segments"></tbody>
+            </table>
+          </details>
+        </div>
+
+        <div class="glass summary-card" id="summary-card" hidden>
+          <div class="card-head">
+            <h2>Across the whole clip</h2>
+            <p class="hint">Each sound's highest score in any slice: did it happen anywhere?</p>
+          </div>
+          <ol class="bars" id="bars"></ol>
+          <p class="meta" id="meta"></p>
+        </div>
+      </section>
+
+      <!-- 3. What the model knows -->
+      <section class="glass sounds-card" id="sounds">
+        <div class="card-head">
+          <h2>What it can recognise</h2>
+          <p class="hint" id="sounds-count"></p>
+        </div>
+        <div class="groups" id="groups"></div>
+        <p class="caveat">
+          It knows these sounds and only these (the ESC-50 dataset). In each slice the
+          probabilities add up to 100%, so it always picks one of them, even for sounds it
+          has never heard, like speech or music.
+        </p>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

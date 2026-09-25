@@ -26,6 +26,31 @@ def load(path: str | Path, sr: int = SAMPLE_RATE) -> np.ndarray:
     return wave.astype(np.float32)
 
 
+def load_any(path: str | Path, max_seconds: float | None = None) -> np.ndarray:
+    """Any audio OR video file (mp3, m4a, mp4, webm, ...) -> same output as `load`.
+
+    ffmpeg only unpacks the audio track into a temporary WAV at its original
+    sample rate; the resampling to 16 kHz is then done by `load`, exactly as it
+    was for the training clips. `max_seconds` keeps only the start of long files.
+    """
+    import subprocess
+    import tempfile
+
+    import imageio_ffmpeg  # ships its own ffmpeg; none is installed system-wide
+
+    with tempfile.TemporaryDirectory() as tmp:
+        wav = Path(tmp) / "audio.wav"
+        cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-nostdin", "-v", "error", "-i", str(path),
+               "-vn", "-ac", "1", "-c:a", "pcm_s16le"]
+        if max_seconds:
+            cmd += ["-t", str(max_seconds)]
+        result = subprocess.run(cmd + [str(wav)], capture_output=True, text=True)
+        if result.returncode != 0 or not wav.exists():
+            raise ValueError("Couldn't find any audio in that file. Upload an audio or video "
+                             "file, such as mp3, wav, m4a, mp4 or webm.")
+        return load(wav)
+
+
 def log_mel(wave: np.ndarray, sr: int = SAMPLE_RATE) -> np.ndarray:
     """Waveform -> log-mel spectrogram, shape (N_MELS, frames).
 

@@ -49,6 +49,8 @@ Windows, Python 3.13, RTX 4060 (CUDA). Run everything from the repo root with th
 .venv/Scripts/python -m src.baseline               # MFCC + sklearn, 5-fold CV, figures -> reports/figures/
 .venv/Scripts/python -m src.models.cnn             # CNN shape check: one clip through the untrained model
 .venv/Scripts/python -m src.train --fold 5 --epochs 60   # train; run folder -> runs/ (weights, history, curves)
+.venv/Scripts/python -m src.infer some_file.mp4    # sliding-window prediction on any audio/video file
+.venv/Scripts/python -m uvicorn server.app:app --port 8000   # web demo on http://localhost:8000 (SOUND_RUN=<run> picks the model)
 .venv/Scripts/python -m jupyter notebook notebooks/ # learning notebooks (01_explore: sound -> log-mel)
 ```
 
@@ -56,5 +58,5 @@ Baseline MFCC features are cached in `data/cache/baseline_features.npz`, and the
 pictures in `data/cache/esc50_logmel.npz`. Delete both after changing `src/audio.py`, or training
 will keep using stale features.
 
-ffmpeg is not installed system-wide. Use the `imageio-ffmpeg` pip package when video audio
-extraction is needed.
+ffmpeg is not installed system-wide. `src/audio.load_any` uses the `imageio-ffmpeg` pip package to unpack
+any audio/video file; resampling still goes through `load` (librosa), exactly as for training.

@@ -9,3 +9,9 @@ matplotlib
 tqdm
 jupyter
 ipykernel
+# web demo: server, audio/video decoding (bundled ffmpeg), YouTube audio
+fastapi
+uvicorn
+python-multipart
+imageio-ffmpeg
+yt-dlp
