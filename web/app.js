@@ -1,9 +1,12 @@
 // One page: pick a YouTube link or a file -> the server analyses it once -> play it here,
 // and the "Now hearing" panel follows the playback using the per-slice predictions.
+// Every sound has its own (corrected) score; the server sends two cut-offs with it:
+// heard (>= heard_cut) and maybe (>= maybe_cut). Below that a sound is not shown.
 
 const $ = (id) => document.getElementById(id);
 const pretty = (label) => label.replaceAll("_", " ");
 const pct = (p) => `${(p * 100).toFixed(1)}%`;
+const pct0 = (p) => `${Math.round(p * 100)}%`;
 const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 const LIVE_ROWS = 5;
 
@@ -35,7 +38,7 @@ fetch("/api/info")
 
 function renderGroups(info) {
   $("sounds-count").textContent =
-    `${info.classes} sounds in ${info.groups.length} groups. While a clip plays, the sound it hears lights up here.`;
+    `${info.classes} sounds in ${info.groups.length} groups. While a clip plays, the sounds it hears light up here.`;
   $("groups").replaceChildren(
     ...info.groups.map((group) => {
       const box = document.createElement("div");
@@ -276,6 +279,11 @@ function clearResult() {
   for (const chip of chips.values()) chip.classList.remove("is-live", "is-heard");
 }
 
+// "heard", "maybe" or "" (not shown), using the cut-offs that came with this answer.
+function levelOf(p) {
+  return p >= result.heard_cut ? "heard" : p >= result.maybe_cut ? "maybe" : "";
+}
+
 function showResult(data) {
   result = data;
   $("source").textContent = data.source;
@@ -285,58 +293,98 @@ function showResult(data) {
   $("now-bars").replaceChildren(...Array.from({ length: rows }, () => barRow()));
   renderSummary(data);
   renderTimeline(data);
-  for (const seg of data.timeline) chips.get(seg.label)?.classList.add("is-heard");
+  for (const row of data.overall)
+    if (row.level === "heard") chips.get(row.label)?.classList.add("is-heard");
   update(true);
 }
 
-function barRow(label = "", prob = 0) {
+function barRow(label = "", prob = 0, level = "") {
   const li = document.createElement("li");
-  li.className = "bar";
   li.innerHTML = `<span class="bar-label"></span>
     <span class="bar-track"><span class="bar-fill"></span></span>
     <span class="bar-value"></span>`;
-  setBar(li, label, prob);
+  setBar(li, label, prob, level);
   return li;
 }
 
-function setBar(li, label, prob) {
+// Solid lime = heard, faded lime = maybe, grey = below the maybe cut-off.
+function setBar(li, label, prob, level) {
+  li.className = "bar" + (level ? ` is-${level}` : "");
   li.querySelector(".bar-label").textContent = pretty(label);
   li.querySelector(".bar-fill").style.width = `${Math.max(prob * 100, 0.5)}%`;
   li.querySelector(".bar-value").textContent = pct(prob);
 }
 
 function renderSummary(data) {
-  $("bars").replaceChildren(...data.overall.map((row) => barRow(row.label, row.prob)));
+  const heard = data.overall.filter((row) => row.level === "heard");
+  const maybe = data.overall.filter((row) => row.level === "maybe");
+  $("heard-title").textContent = `Heard (${pct0(data.heard_cut)} or more)`;
+  $("maybe-title").textContent = `Maybe (${pct0(data.maybe_cut)} to ${pct0(data.heard_cut)})`;
+  $("bars-heard").replaceChildren(...heard.map((row) => barRow(row.label, row.prob, row.level)));
+  $("bars-maybe").replaceChildren(...maybe.map((row) => barRow(row.label, row.prob, row.level)));
+  $("heard-title").hidden = $("bars-heard").hidden = heard.length === 0;
+  $("maybe-title").hidden = $("bars-maybe").hidden = maybe.length === 0;
+  $("nothing").hidden = data.overall.length > 0;
+  $("nothing").textContent =
+    `None of the ${data.labels.length} sounds it knows scored ${pct0(data.maybe_cut)} or more anywhere in this clip.`;
   $("meta").textContent =
     `${clock(data.duration)} long, ${data.windows} slice${data.windows === 1 ? "" : "s"}, ` +
-    `analysed in ${data.seconds}s on ${data.device.toUpperCase()}` +
+    `analysed in ${data.seconds}s on ${data.device.toUpperCase()} by ${data.model}` +
+    (data.calibrated ? ", corrected scores" : "") +
     (data.truncated ? ". Only the first 10 minutes were used." : "");
   $("summary-card").hidden = false;
 }
 
+// One lane per sound; a sound's segments are placed by time, so lanes overlap
+// wherever several sounds were heard at once.
 function renderTimeline(data) {
   // A single 5 s slice has nothing to show over time.
   $("timeline-card").hidden = data.windows < 2;
   if (data.windows < 2) return;
 
-  $("timeline").replaceChildren(
-    ...data.timeline.map((seg) => {
+  $("timeline-hint").textContent =
+    `One row per sound. Solid: heard (${pct0(data.heard_cut)} or more); faded: maybe ` +
+    `(${pct0(data.maybe_cut)} to ${pct0(data.heard_cut)}). Rows that overlap in time are ` +
+    `sounds heard together. Click anywhere to jump there.`;
+  const at = (t) => `${(t / data.duration) * 100}%`;
+  const describe = (lane, seg) =>
+    `${clock(seg.start)}–${clock(seg.end)}  ${pretty(lane.label)}  ${seg.level}, ${pct(seg.prob)}`;
+
+  const lanes = data.timeline.map((lane) => {
+    const row = document.createElement("div");
+    row.className = "lane";
+    const name = document.createElement("span");
+    name.className = "lane-label";
+    name.textContent = pretty(lane.label);
+    const track = document.createElement("div");
+    track.className = "lane-track";
+    for (const seg of lane.segments) {
       const el = document.createElement("div");
-      const alpha = 0.15 + 0.85 * seg.prob; // brighter = more confident
-      el.className = "seg" + (alpha < 0.55 ? " is-dim" : "");
-      el.style.flex = `${seg.end - seg.start} 0 0`;
-      el.style.setProperty("--a", alpha.toFixed(2));
-      el.title = `${clock(seg.start)}–${clock(seg.end)}  ${pretty(seg.label)}  ${pct(seg.prob)}`;
-      el.textContent = pretty(seg.label);
-      return el;
-    })
-  );
+      el.className = `seg is-${seg.level}`;
+      el.style.left = at(seg.start);
+      el.style.width = at(seg.end - seg.start);
+      el.title = describe(lane, seg);
+      track.append(el);
+    }
+    row.append(name, track);
+    return row;
+  });
+  if (lanes.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hint lanes-empty";
+    empty.textContent = "No sound it knows was heard anywhere in this clip.";
+    lanes.push(empty);
+  }
+  $("lanes").replaceChildren(...lanes);
   $("axis-end").textContent = clock(data.duration);
 
+  const rows = data.timeline
+    .flatMap((lane) => lane.segments.map((seg) => ({ lane, seg })))
+    .sort((x, y) => x.seg.start - y.seg.start);
   $("segments").replaceChildren(
-    ...data.timeline.map((seg) => {
+    ...rows.map(({ lane, seg }) => {
       const tr = document.createElement("tr");
-      for (const text of [clock(seg.start), clock(seg.end), pretty(seg.label), pct(seg.prob)]) {
+      for (const text of [clock(seg.start), clock(seg.end), pretty(lane.label), seg.level, pct(seg.prob)]) {
         const td = document.createElement("td");
         td.textContent = text;
         tr.append(td);
@@ -347,10 +395,12 @@ function renderTimeline(data) {
   );
 }
 
+// Only the tracks are on the clock; a click on the sound names does nothing.
 $("timeline-wrap").addEventListener("click", (e) => {
   if (!result) return;
-  const box = e.currentTarget.getBoundingClientRect();
-  seek(((e.clientX - box.left) / box.width) * result.duration);
+  const box = $("track-area").getBoundingClientRect();
+  const f = (e.clientX - box.left) / box.width;
+  if (f >= 0 && f <= 1) seek(f * result.duration);
 });
 
 // ---------- live: follow the player ----------
@@ -379,14 +429,27 @@ function update(force = false) {
 
   const probs = result.window_probs[k];
   const order = probs.map((_, i) => i).sort((a, b) => probs[b] - probs[a]);
-  const top = result.labels[order[0]];
-  $("now-label").textContent = pretty(top);
-  $("now-label").classList.toggle("is-unsure", probs[order[0]] < 0.5);
-  $("now-prob").textContent = pct(probs[order[0]]);
-  [...$("now-bars").children].forEach((li, i) => setBar(li, result.labels[order[i]], probs[order[i]]));
+  const heard = order.filter((i) => levelOf(probs[i]) === "heard");
+  const maybe = order.filter((i) => levelOf(probs[i]) === "maybe");
+
+  // Big line: every sound heard now; else the best "maybe"; else nothing.
+  const label = $("now-label");
+  if (heard.length) label.textContent = heard.map((i) => pretty(result.labels[i])).join(" + ");
+  else if (maybe.length) label.textContent = `maybe ${pretty(result.labels[maybe[0]])}`;
+  else label.textContent = "Nothing it recognises";
+  label.classList.toggle("is-unsure", heard.length === 0);
+  label.classList.toggle("is-many", heard.length > 1 || heard.length + maybe.length === 0);
+
+  const counts = [heard.length && `${heard.length} heard`, maybe.length && `${maybe.length} maybe`]
+    .filter(Boolean).join(", ");
+  $("now-sub").textContent = counts
+    ? `${counts} in this slice`
+    : `No sound scored ${pct0(result.maybe_cut)} or more in this slice.`;
+  [...$("now-bars").children].forEach((li, i) =>
+    setBar(li, result.labels[order[i]], probs[order[i]], levelOf(probs[order[i]])));
 
   for (const chip of chips.values()) chip.classList.remove("is-live");
-  chips.get(top)?.classList.add("is-live");
+  for (const i of heard) chips.get(result.labels[i])?.classList.add("is-live");
 }
 
 (function tick() {

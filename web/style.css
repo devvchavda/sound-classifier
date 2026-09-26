@@ -291,6 +291,7 @@ video.media { max-height: 75vh; }
   transition: color 0.3s var(--ease);
 }
 .now-label.is-unsure { color: var(--text-2); }
+.now-label.is-many { font-size: clamp(1.6rem, 3vw, 2.5rem); } /* several sounds, or "nothing" */
 .now-prob { margin: 0.5rem 0 1.5rem; color: var(--text-2); }
 .now-prob span { color: var(--text); font-family: var(--mono); }
 .now-hint { margin-top: 1.25rem; }
@@ -310,40 +311,47 @@ video.media { max-height: 75vh; }
   display: block; /* a span is inline, and inline boxes ignore width */
   height: 100%;
   border-radius: 4px;
-  background: rgba(204, 255, 0, 0.45);
+  background: rgba(255, 255, 255, 0.18); /* below the "maybe" cut-off */
   transform-origin: left;
   animation: grow 0.6s var(--ease) both;
 }
 .bars.live .bar-fill { animation: none; transition: width 0.35s var(--ease); }
-.bar:first-child .bar-fill { background: var(--lime); }
+.bar.is-heard .bar-fill { background: var(--lime); }
+.bar.is-maybe .bar-fill { background: rgba(204, 255, 0, 0.35); }
+.bar.is-maybe .bar-label::after { content: " · maybe"; color: var(--text-3); font-size: 0.8em; }
+.bar:not(.is-heard, .is-maybe) .bar-label { color: var(--text-3); }
 .bar-value { color: var(--text-2); font: 400 0.85rem var(--mono); text-align: right; }
 .summary-card, .timeline-card { padding: 1.75rem; }
-.summary-card .bars { max-width: 44rem; }
+.summary-card .bars { max-width: 44rem; margin-bottom: 1.5rem; }
 .meta { margin: 1.5rem 0 0; color: var(--text-3); font: 400 0.8rem var(--mono); }
 
 /* ---------- timeline ---------- */
+/* One lane per sound: name on the left, its track on the right. The playhead and
+   the axis sit over the tracks only, so they are offset by the name column. */
+.timeline-card { --label-w: 9rem; --lane-gap: 0.75rem; }
 .timeline-wrap { position: relative; cursor: pointer; }
-.timeline {
-  display: flex;
-  gap: 2px;
-  height: 4.5rem;
+.lanes { display: grid; gap: 0.4rem; min-height: 2rem; }
+.lane { display: grid; grid-template-columns: var(--label-w) 1fr; gap: var(--lane-gap); align-items: center; }
+.lane-label { overflow: hidden; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
+.lane-track {
+  position: relative;
+  height: 1.5rem;
   overflow: hidden;
-  border-radius: 1rem;
+  border-radius: 0.5rem;
   background: rgba(255, 255, 255, 0.04);
 }
-.seg {
-  display: flex;
-  align-items: flex-end;
-  min-width: 2px;
-  padding: 0.5rem;
-  overflow: hidden;
-  background: rgb(204 255 0 / var(--a));
-  color: var(--black);
-  font-size: 0.8rem;
-  font-weight: 600;
-  white-space: nowrap;
+.seg { position: absolute; top: 0; bottom: 0; min-width: 2px; }
+.seg.is-heard { background: var(--lime); }
+.seg.is-maybe { background: rgba(204, 255, 0, 0.3); }
+.lanes-empty { align-self: center; }
+.track-area {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: calc(var(--label-w) + var(--lane-gap));
+  pointer-events: none;
 }
-.seg.is-dim { color: var(--text); }
 .playhead {
   position: absolute;
   top: -0.35rem;
@@ -356,12 +364,12 @@ video.media { max-height: 75vh; }
   box-shadow: 0 0 12px rgba(255, 255, 255, 0.7);
   pointer-events: none;
 }
-.axis { display: flex; justify-content: space-between; margin-top: 0.5rem; color: var(--text-3); font: 400 0.8rem var(--mono); }
+.axis { display: flex; justify-content: space-between; margin: 0.5rem 0 0 calc(var(--label-w) + var(--lane-gap)); color: var(--text-3); font: 400 0.8rem var(--mono); }
 details { margin-top: 1.25rem; color: var(--text-2); }
 summary { cursor: pointer; }
 .segments { width: 100%; margin-top: 0.75rem; border-collapse: collapse; font-size: 0.9rem; }
 .segments th, .segments td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line); text-align: left; }
-.segments td:not(:nth-child(3)) { font-family: var(--mono); }
+.segments td:is(:nth-child(1), :nth-child(2), :nth-child(5)) { font-family: var(--mono); }
 .segments tbody tr { cursor: pointer; }
 .segments tbody tr:hover { background: rgba(255, 255, 255, 0.04); }
 
@@ -395,6 +403,7 @@ summary { cursor: pointer; }
   .stage, .stage[data-shape] { grid-template-columns: minmax(0, 1fr); }
   .stage[data-shape="vertical"] .yt-frame { width: min(22rem, 100%); margin: 0 auto; }
   .bar { grid-template-columns: 7rem 1fr 3.25rem; }
+  .timeline-card { --label-w: 6.5rem; }
 }
 @media (max-width: 620px) {
   body { padding: 0.5rem; }

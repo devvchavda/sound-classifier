@@ -4,7 +4,9 @@
     then open http://localhost:8000
 
 The model is loaded once at startup and stays on the GPU. Pick another trained
-run with the SOUND_RUN environment variable (default: gain10).
+run with the SOUND_RUN environment variable (default: multilabel_150). Scores are
+corrected with the run's calibration.json, and the page gets the two cut-offs
+(heard / maybe) with every answer.
 Endpoints are plain `def`, so FastAPI runs them in a worker thread and the slow
 parts (ffmpeg, downloads, the model) don't block the server.
 """
@@ -20,24 +22,24 @@ from pydantic import BaseModel
 
 from src import audio
 from src.datasets import ROOT, esc50_meta
-from src.infer import Tagger
+from src.infer import HEARD, Tagger
 
 MAX_SECONDS = 600  # 10 min: longer uploads are cut, longer YouTube videos refused
 
 # ESC-50 numbers its classes so that target // 10 is one of five broad groups.
 ESC50_GROUPS = ["Animals", "Nature and water", "Human sounds", "Around the house", "Outdoors and city"]
 
-tagger = Tagger(os.environ.get("SOUND_RUN", "gain10"))
+tagger = Tagger(os.environ.get("SOUND_RUN", "multilabel_150"))
 app = FastAPI(title="Sound tagger")
 
 
 def _label_groups(labels: list[str]) -> list[dict]:
     """The model's own labels, grouped for display. A label that is not an ESC-50
-    class (a data/custom/<label>/ folder) goes under "Your recordings"."""
+    class (a data/custom/<label>/ folder, e.g. speech) goes under "Added by us"."""
     target = dict(esc50_meta()[["category", "target"]].drop_duplicates().values)
-    groups = {name: [] for name in ESC50_GROUPS + ["Your recordings"]}
+    groups = {name: [] for name in ESC50_GROUPS + ["Added by us"]}
     for label in labels:
-        name = ESC50_GROUPS[target[label] // 10] if label in target else "Your recordings"
+        name = ESC50_GROUPS[target[label] // 10] if label in target else "Added by us"
         groups[name].append(label)
     return [{"name": name, "labels": sorted(ls)} for name, ls in groups.items() if ls]
 
@@ -48,7 +50,9 @@ GROUPS = _label_groups(tagger.labels)
 @app.get("/api/info")
 def info():
     return {"model": tagger.run, "device": tagger.device.type, "classes": len(tagger.labels),
-            "labels": tagger.labels, "groups": GROUPS, "max_seconds": MAX_SECONDS}
+            "labels": tagger.labels, "groups": GROUPS, "max_seconds": MAX_SECONDS,
+            "multilabel": tagger.multilabel, "calibrated": tagger.calibration is not None,
+            "heard_cut": HEARD, "maybe_cut": round(tagger.maybe_cut, 3)}
 
 
 @app.post("/api/predict")

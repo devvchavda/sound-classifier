@@ -28,7 +28,8 @@
         <h1>What's making that sound?</h1>
         <p class="lede">
           Paste a YouTube link or upload a clip, then press play. The model listens in
-          5-second slices and shows, moment by moment, which sound it thinks is playing.
+          5-second slices and shows, moment by moment, which sounds it hears: several
+          at once, or none.
         </p>
 
         <form class="glass input-card" id="form">
@@ -84,7 +85,7 @@
               <span class="now-clock" id="now-clock">0:00</span>
             </p>
             <p class="now-label" id="now-label"></p>
-            <p class="now-prob"><span id="now-prob"></span> sure in this slice</p>
+            <p class="now-prob" id="now-sub"></p>
             <ol class="bars live" id="now-bars"></ol>
             <p class="hint now-hint" id="now-hint">Press play. The labels follow the audio as it plays.</p>
           </div>
@@ -93,17 +94,17 @@
         <div class="glass timeline-card" id="timeline-card" hidden>
           <div class="card-head">
             <h2>Timeline</h2>
-            <p class="hint">The top sound in each slice; brighter means more confident. Click anywhere to jump there.</p>
+            <p class="hint" id="timeline-hint"></p>
           </div>
           <div class="timeline-wrap" id="timeline-wrap">
-            <div class="timeline" id="timeline"></div>
-            <div class="playhead" id="playhead" aria-hidden="true"></div>
+            <div class="lanes" id="lanes"></div>
+            <div class="track-area" id="track-area" aria-hidden="true"><div class="playhead" id="playhead"></div></div>
           </div>
           <div class="axis"><span>0:00</span><span id="axis-end"></span></div>
           <details>
             <summary>Show as a list</summary>
             <table class="segments">
-              <thead><tr><th>From</th><th>To</th><th>Sound</th><th>Confidence</th></tr></thead>
+              <thead><tr><th>From</th><th>To</th><th>Sound</th><th>Level</th><th>Score</th></tr></thead>
               <tbody id="segments"></tbody>
             </table>
           </details>
@@ -114,7 +115,11 @@
             <h2>Across the whole clip</h2>
             <p class="hint">Each sound's highest score in any slice: did it happen anywhere?</p>
           </div>
-          <ol class="bars" id="bars"></ol>
+          <h3 id="heard-title">Heard</h3>
+          <ol class="bars" id="bars-heard"></ol>
+          <h3 id="maybe-title">Maybe</h3>
+          <ol class="bars" id="bars-maybe"></ol>
+          <p class="hint" id="nothing" hidden></p>
           <p class="meta" id="meta"></p>
         </div>
       </section>
@@ -127,9 +132,11 @@
         </div>
         <div class="groups" id="groups"></div>
         <p class="caveat">
-          It knows these sounds and only these (the ESC-50 dataset). In each slice the
-          probabilities add up to 100%, so it always picks one of them, even for sounds it
-          has never heard, like speech or music.
+          Each sound gets its own score from 0 to 100%, independent of the others, so it can
+          hear several at once (a dog barking while someone talks) or none at all. The scores
+          are corrected to be honest: of all the times it says about 60%, the sound really was
+          there about 60% of the time, checked on clips it never trained on. It still knows
+          only these sounds; music, for example, is not one of them.
         </p>
       </section>
     </main>

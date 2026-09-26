@@ -297,3 +297,18 @@ failures and their fixes. The newest entry is at the bottom.
   (F1 0.525) on every line: the extra fold of training data is kept, the honesty too.
 - **Decision:** the website will use `multilabel_150` with this calibration.json:
   "heard" >= 50%, "maybe" 26-50% (corrected scores).
+
+## 2026-09-26: Website switched to the multi-label model; first real-world demo clip
+
+- The site now runs `multilabel_150` with its correction (`src/infer.py`, `server/app.py`, `web/`):
+  every sound has its own honest score, "heard" >= 50%, "maybe" 26-50%, below that hidden.
+  "Now hearing" lists every sound heard at that moment (or "Nothing it recognises"), and the
+  timeline has one lane per sound, so overlapping sounds show as overlapping bars. The old
+  single-label site could only ever show one sound per slice, even with two playing.
+- **Demo clip (found by the student):** https://youtube.com/shorts/_n-yXZQGe5E. A man talks, sees
+  a dog, and then he and the dog bark at each other. The student's check: speech and dog both
+  came up, where they happen. A real YouTube video, not ESC-50 or a mix we made, so it is the
+  "does it work outside the dataset?" example for the presentation.
+- Download hiccup: one other link failed with YouTube's "Please sign in" (yt-dlp already the
+  newest). Other links worked, so it was that video, not a block on our connection. Keep a
+  local copy of the demo clip for the presentation in case YouTube blocks it on the day.
