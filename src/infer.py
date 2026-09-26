@@ -1,6 +1,6 @@
 """Run a trained model on any audio or video file, of any length.
 
-    python -m src.infer path/to/file.mp3 [--run with_dropout]
+    python -m src.infer path/to/file.mp3 [--run gain10]
 
 The model learned from exactly 5 s pictures, so a long file is cut into 5 s
 windows, one starting every second (they overlap, so a sound on a window's edge
@@ -34,7 +34,7 @@ TOP_K = 10
 class Tagger:
     """A trained run, loaded once: weights + its own labels + its own normalisation."""
 
-    def __init__(self, run: str = "with_dropout", device: str | None = None):
+    def __init__(self, run: str = "gain10", device: str | None = None):
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         ckpt = torch.load(RUNS / run / "model.pt", map_location=self.device, weights_only=False)
         self.run = run
@@ -115,7 +115,7 @@ class Tagger:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Tag the sounds in any audio/video file.")
     parser.add_argument("path")
-    parser.add_argument("--run", default="with_dropout", help="folder under runs/")
+    parser.add_argument("--run", default="gain10", help="folder under runs/")
     args = parser.parse_args()
 
     tagger = Tagger(args.run)

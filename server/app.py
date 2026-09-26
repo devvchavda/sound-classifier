@@ -4,7 +4,7 @@
     then open http://localhost:8000
 
 The model is loaded once at startup and stays on the GPU. Pick another trained
-run with the SOUND_RUN environment variable (default: with_dropout).
+run with the SOUND_RUN environment variable (default: gain10).
 Endpoints are plain `def`, so FastAPI runs them in a worker thread and the slow
 parts (ffmpeg, downloads, the model) don't block the server.
 """
@@ -27,7 +27,7 @@ MAX_SECONDS = 600  # 10 min: longer uploads are cut, longer YouTube videos refus
 # ESC-50 numbers its classes so that target // 10 is one of five broad groups.
 ESC50_GROUPS = ["Animals", "Nature and water", "Human sounds", "Around the house", "Outdoors and city"]
 
-tagger = Tagger(os.environ.get("SOUND_RUN", "with_dropout"))
+tagger = Tagger(os.environ.get("SOUND_RUN", "gain10"))
 app = FastAPI(title="Sound tagger")
 
 

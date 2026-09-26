@@ -57,14 +57,57 @@ def load_split(test_fold: int, device: torch.device):
     return to_tensors(train), to_tensors(test), labels, {"mean": mean, "std": std}
 
 
-def train_one_epoch(model, x, y, loss_fn, optimizer, batch_size, generator):
-    """One pass over the training clips, in a fresh random order."""
+def stripes(n_clips: int, length: int, max_width: int, generator) -> torch.Tensor:
+    """(n_clips, length): True inside one random stripe per clip, 0..max_width wide."""
+    width = torch.randint(0, max_width + 1, (n_clips, 1), generator=generator)
+    start = (torch.rand(n_clips, 1, generator=generator) * (length - width + 1)).long()
+    pos = torch.arange(length)
+    return (pos >= start) & (pos < start + width)
+
+
+def spec_augment(x, generator, n_masks=2, max_bands=8, max_frames=50):
+    """SpecAugment: blank out random stripes of each training picture.
+
+    Per clip, `n_masks` horizontal stripes (up to 8 of the 64 mel bands, i.e.
+    some pitches muted for the whole clip) and `n_masks` vertical ones (up to
+    50 frames = 0.5 s muted). New stripes every batch, so the model never sees
+    the exact same picture twice and can't memorise one detail of it. Blanked
+    cells get 0: after normalisation, that is the training set's average level.
+    """
+    n, _, n_mels, n_frames = x.shape
+    hide = torch.zeros(n, n_mels, n_frames, dtype=torch.bool, device=x.device)
+    for _ in range(n_masks):
+        hide |= stripes(n, n_mels, max_bands, generator).to(x.device)[:, :, None]
+        hide |= stripes(n, n_frames, max_frames, generator).to(x.device)[:, None, :]
+    return x.masked_fill(hide.unsqueeze(1), 0.0)
+
+
+def random_gain(x, generator, max_shift, floor):
+    """Play each clip louder or quieter by a random amount.
+
+    Log-mel is in decibels, so turning the volume up by g dB adds g to every
+    cell; after normalisation that is g / std, and `max_shift` is the limit in
+    those units. Digital silence (`floor`, from padded clips) stays silent,
+    and nothing gets quieter than it, just as with real audio.
+    """
+    shift = (torch.rand(len(x), 1, 1, 1, generator=generator) * 2 - 1) * max_shift
+    louder = torch.clamp(x + shift.to(x.device), min=floor)
+    return torch.where(x <= floor, x, louder)
+
+
+def train_one_epoch(model, x, y, loss_fn, optimizer, batch_size, generator, augment=None):
+    """One pass over the training clips, in a fresh random order.
+
+    `augment`, if given, changes each batch's pictures before the model sees
+    them. Only training batches go through it; the test fold never does.
+    """
     model.train()  # BatchNorm uses each batch's own average
     order = torch.randperm(len(x), generator=generator).to(x.device)
     total_loss, correct = 0.0, 0
     for start in range(0, len(x), batch_size):
         idx = order[start:start + batch_size]
-        scores = model(x[idx])
+        batch = augment(x[idx]) if augment else x[idx]
+        scores = model(batch)
         loss = loss_fn(scores, y[idx])  # softmax + cross-entropy in one step
 
         optimizer.zero_grad()  # forget the previous batch's slopes
@@ -119,6 +162,12 @@ def main() -> None:
     parser.add_argument("--lr", type=float, default=1e-3, help="starting learning rate")
     parser.add_argument("--dropout", type=float, default=0.5,
                         help="share of the 256 detector values zeroed each step (0 = off)")
+    parser.add_argument("--specaugment", type=int, default=0, metavar="N",
+                        help="blank N random pitch stripes and N time stripes of each "
+                             "training picture (0 = off; run 3 used 2)")
+    parser.add_argument("--gain", type=float, default=0, metavar="DB",
+                        help="play each training clip at a random volume, up to ±DB decibels "
+                             "(0 = off)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--name", default=None, help="run folder name (default: fold + time)")
     args = parser.parse_args()
@@ -140,6 +189,24 @@ def main() -> None:
     # Big steps early, smaller and smaller ones later, so it settles in the valley.
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
     generator = torch.Generator().manual_seed(args.seed)
+    # Augmentation gets its own random stream, so the shuffle order stays the
+    # same as in a run without it: the augmentation is the only difference.
+    aug_generator = torch.Generator().manual_seed(args.seed)
+    # Digital silence (-100 dB, the log-mel floor) as it looks after normalisation.
+    floor = float(x_train.min())
+
+    def augment(batch):
+        if args.gain:
+            batch = random_gain(batch, aug_generator, args.gain / norm["std"], floor)
+        if args.specaugment:
+            batch = spec_augment(batch, aug_generator, n_masks=args.specaugment)
+        return batch
+
+    print(f"gain: random, up to +/-{args.gain:g} dB per clip" if args.gain else "gain off")
+    print(f"SpecAugment: {args.specaugment} pitch + {args.specaugment} time stripes per clip"
+          if args.specaugment else "SpecAugment off")
+    if not (args.gain or args.specaugment):
+        augment = None
 
     # Sanity check before any learning: a blind guess over 50 classes scores
     # about -log(1/50) = 3.9. Far from that means something is wired wrong.
@@ -153,7 +220,7 @@ def main() -> None:
         t0 = time.time()
         lr = optimizer.param_groups[0]["lr"]
         train_loss, train_acc = train_one_epoch(
-            model, x_train, y_train, loss_fn, optimizer, args.batch_size, generator)
+            model, x_train, y_train, loss_fn, optimizer, args.batch_size, generator, augment)
         test_loss, test_acc = evaluate(model, x_test, y_test, loss_fn)
         scheduler.step()
         history.append({"epoch": epoch, "lr": lr, "train_loss": train_loss,
@@ -171,7 +238,13 @@ def main() -> None:
     (run_dir / "history.json").write_text(json.dumps(history, indent=1))
     plot_curves(history, f"Our CNN, test fold {args.fold} ({name})", run_dir / "curves.png")
 
+    # The blue train curve was measured with dropout on (and stripes, if used),
+    # which understates how well the model knows its training clips. Measured
+    # clean, it is the honest "memorised" number to set against the test fold.
+    _, clean_train_acc = evaluate(model, x_train, y_train, loss_fn)
+
     print(f"\nfinished in {(time.time() - start) / 60:.1f} min")
+    print(f"train accuracy, clean (no dropout, no stripes): {clean_train_acc:.3f}")
     print(f"REPORTED RESULT (last epoch): test accuracy {history[-1]['test_acc']:.3f}")
     print(f"saved to {run_dir}")
 

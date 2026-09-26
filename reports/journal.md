@@ -142,3 +142,66 @@ failures and their fixes. The newest entry is at the bottom.
   answer appeared top-right while the input sat bottom-left.
 - **Bug found while testing:** the probability bars had always been empty. The coloured fill
   was a `<span>`, and inline elements ignore `width`; `display: block` fixed it.
+
+## 2026-09-26: SpecAugment (run 3: worse, 0.752 vs 0.790)
+
+- **What:** every training batch gets 2 random pitch stripes (up to 8 of 64 mel bands, muted for
+  the whole clip) and 2 random time stripes (up to 0.5 s, all pitches muted). About 20% of each
+  picture is hidden, a different 20% every time. Test clips are never masked. Same fold 5, seed,
+  60 epochs and dropout 0.5 as run 2; the stripes use their own random stream, so the shuffle
+  order is identical and the masks are the only difference.
+- **Why:** run 2 showed memorisation (train 0.993 vs test 0.790). Hiding a different part of
+  each picture every epoch should leave nothing exact to memorise. Time shift was skipped: the
+  CNN's global pooling already mostly ignores *where* a sound is, so it was expected to do little.
+- **Result: test 0.752 (last epoch), down from 0.790.** Clean train accuracy fell to 0.946 (from
+  0.993), so it did memorise less, but the test score fell by about as much: the train-test gap
+  stayed ~19-20 points. Test accuracy was flat around 0.75 for the last 15 epochs.
+- **Reading:** the stripes made the task harder without making the model generalise better.
+  Suspects: too strong on top of dropout, or 60 epochs too few for a harder task. Not yet tested.
+
+## 2026-09-26: Smaller stripes (run 4: 0.770), SpecAugment dropped
+
+- Same as run 3 but 1 pitch + 1 time stripe per clip (~10% hidden instead of ~20%).
+- **Test 0.770, clean train 0.975.** The trend is one-directional:
+
+  | stripes per kind | clean train | test (last epoch) | gap |
+  |---|---|---|---|
+  | 0 (run 2) | 0.993 | **0.790** | 20 pts |
+  | 1 (run 4) | 0.975 | 0.770 | 20 pts |
+  | 2 (run 3) | 0.946 | 0.752 | 19 pts |
+
+- More masking lowers both numbers together; the gap never closes. So on this model and data,
+  masking does not help generalisation, it only makes the task harder. Differences of 0.02 are
+  8 clips out of 400 and could partly be run-to-run noise, but the direction is the same at both
+  sizes.
+- The student suspected the learning rate. Checked against the logs: clean train accuracy stays
+  high (0.95-0.99), so the model learns fine; the problem is the gap, which a learning-rate change
+  moves up or down together rather than closing. Not tested with a run.
+- **Decision:** SpecAugment stays in the code (`--specaugment N`, default off) but is not used.
+  `runs/with_dropout` (0.790) remains the model.
+
+## 2026-09-26: Random volume (run 5: 0.787, no change)
+
+- **What:** every training clip is played at a random volume between -10 and +10 dB (10 dB is
+  roughly what people hear as "twice / half as loud"), new each batch. Done on the cached log-mel:
+  in decibels, louder by g dB = +g on every cell. Digital silence (-100 dB, 10% of all cells, from
+  padded clips) is left untouched, as real audio would. Checked against actually rescaling the
+  audio and recomputing: identical at -10 dB; at +10 dB only 36 of 32,064 cells differ, all at
+  -90 to -100 dB (inaudible), mean difference 0.007 dB.
+- **Why:** YouTube and phone audio come at very different volumes; ESC-50's test clips don't.
+- **Result: test 0.787 vs 0.790 (1 clip out of 400), clean train 0.991.** No effect on fold 5
+  either way, and the train-test gap is unchanged.
+- **Reading:** fold 5 can't show what gain is for. Its clips are at ESC-50's own recording level,
+  so a model that falls apart on quiet or loud audio would still score the same here.
+- **Follow-up test: fold 5 played at other volumes** (no retraining; same silence rule as training):
+
+  | volume change | -20 dB | -10 dB | 0 dB | +10 dB | +20 dB |
+  |---|---|---|---|---|---|
+  | no gain (run 2) | 0.522 | 0.740 | **0.790** | 0.725 | 0.570 |
+  | gain +/-10 dB (run 5) | **0.685** | **0.780** | 0.788 | **0.775** | **0.728** |
+
+  At the recorded volume they tie. Away from it the old model collapses (loses 27 points at
+  -20 dB); the gain model loses 10 at worst, and holds up even at +/-20 dB, beyond the +/-10 it was
+  trained with. The plain fold-5 score hid this completely: **a test set only measures the
+  conditions it contains.**
+- **Decision:** keep gain. Run 5 (`runs/gain10`) is the better model for real-world audio.

@@ -48,7 +48,7 @@ Windows, Python 3.13, RTX 4060 (CUDA). Run everything from the repo root with th
 .venv/Scripts/python scripts/download_data.py      # ESC-50 + speech clips -> data/ (gitignored)
 .venv/Scripts/python -m src.baseline               # MFCC + sklearn, 5-fold CV, figures -> reports/figures/
 .venv/Scripts/python -m src.models.cnn             # CNN shape check: one clip through the untrained model
-.venv/Scripts/python -m src.train --fold 5 --epochs 60   # train; run folder -> runs/ (weights, history, curves)
+.venv/Scripts/python -m src.train --fold 5 --epochs 60 --gain 10 --name gain10   # train (current best); run folder -> runs/
 .venv/Scripts/python -m src.infer some_file.mp4    # sliding-window prediction on any audio/video file
 .venv/Scripts/python -m uvicorn server.app:app --port 8000   # web demo on http://localhost:8000 (SOUND_RUN=<run> picks the model)
 .venv/Scripts/python -m jupyter notebook notebooks/ # learning notebooks (01_explore: sound -> log-mel)
