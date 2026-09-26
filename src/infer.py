@@ -40,7 +40,9 @@ class Tagger:
         self.run = run
         self.labels = ckpt["labels"]
         self.norm = ckpt["norm"]
-        self.model = SoundCNN(len(self.labels), dropout=ckpt["config"].get("dropout", 0.0))
+        self.multilabel = ckpt["config"].get("multilabel", False)
+        self.model = SoundCNN(len(self.labels), dropout=ckpt["config"].get("dropout", 0.0),
+                              multilabel=self.multilabel)
         self.model.load_state_dict(ckpt["state_dict"])
         self.model.to(self.device).eval()  # eval: dropout off, BatchNorm uses saved averages
 
@@ -70,7 +72,7 @@ class Tagger:
         probs = torch.cat([
             self.model.predict_proba(x[i:i + batch_size].float().to(self.device)).cpu()
             for i in range(0, len(x), batch_size)
-        ]).numpy()  # (windows, classes); each row sums to 1
+        ]).numpy()  # (windows, classes); rows sum to 1 unless the model is multi-label
 
         best = probs.max(axis=0)
         overall = [{"label": self.labels[i], "prob": float(best[i])}

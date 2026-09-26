@@ -205,3 +205,95 @@ failures and their fixes. The newest entry is at the bottom.
   trained with. The plain fold-5 score hid this completely: **a test set only measures the
   conditions it contains.**
 - **Decision:** keep gain. Run 5 (`runs/gain10`) is the better model for real-world audio.
+
+## 2026-09-26: Multi-label plan, and mixing pictures instead of recordings (checked)
+
+- **Plan:** sigmoid + binary cross-entropy (51 independent yes/no scores, speech added as the
+  51st), trained on on-the-fly mixtures: 1 sound 40%, 2 sounds 40%, 3 sounds 20%; any classes
+  (no "realistic pairs only", or the model learns "rain means thunder"); pick the class first,
+  then a clip (speech has 130 clips vs 40 per ESC-50 class); loudness equalised, then each sound
+  0-10 dB below the loudest; random time slide per sound; whole mix +/-10 dB. Fresh mixes every
+  epoch: same 1,600 pictures per epoch, but ~1.3 M possible pairs and ~680 M triples, so almost
+  none repeat. New combinations, not new sounds: every dog is still one of the same 32 recordings.
+- **Why not a fixed set of 96,000 mixes:** it could be memorised too (just bigger), and at ~125 KB
+  per picture it would be ~12 GB, more than the GPU's 8 GB.
+- **Mixing check:** the exact way (add the recordings, recompute the log-mel) costs ~30 s per
+  epoch. The fast way adds the cached pictures as energy (dB -> power, add, -> dB; two 60 dB
+  sounds make ~63 dB, not 120). On 200 random training pairs (second sound 0-10 dB quieter):
+  **mean difference 0.52 dB, 97.6% of pixels within 3 dB** (~1 dB is about the smallest loudness
+  change people notice; pixels spread +/-27.8 dB). Slightly worse in the lowest 8 mel bands
+  (0.69 dB): they contain only a few frequencies each, so the cancelling/reinforcing of the two
+  waves doesn't average out there. **Decision: mix pictures, on the GPU.**
+
+## 2026-09-26: First multi-label run (run 6): mAP 0.456, and now it UNDER-fits
+
+- **Setup:** `src/train_multilabel.py`, 51 sounds (ESC-50 + speech from `data/custom/`, speakers
+  dealt into folds, 5 unseen speakers in fold 5), sigmoid + BCE, 1,600 fresh mixes per epoch,
+  60 epochs, dropout 0.5. Test: 1,000 fixed fold-5 mixes + the 400 single ESC-50 clips.
+- **Bug caught before training:** loudness was first measured as the 90th percentile of frame
+  energy. 18 clips are >90% silence (one bark in 5 s), measured -100 dB, and were boosted by
+  ~100 dB: mixes reached 129.5 dB (singles max 24.5). Switched to the 99th percentile: max 43 dB.
+- **Result (last epoch):** mAP **0.456** (random ~0.035) | precision **0.880**, recall **0.141**
+  at 0.5 | single-clip top-1 **0.707** (single-label: 0.790). Speech AP 0.878 (unseen speakers).
+  Easiest: clock_alarm 0.96, brushing_teeth, hand_saw, speech, rain 0.84. Hardest: pig 0.06,
+  drinking_sipping 0.07, sneezing, washing_machine, coughing.
+- **Precision 0.88 but recall 0.14:** when it says "yes" it is usually right, but it says "yes"
+  rarely: each sound is absent ~96% of the time, so a cautious model leans to "no", and 0.5 is a
+  high bar. The cut-off needs tuning (on training folds, not fold 5).
+- **Memorising is gone, now it under-fits:** clean train mAP 0.545 / top-1 0.871 vs test 0.456 /
+  0.707. Train loss ~= test loss (0.104 vs 0.103). Both losses and test mAP were still improving
+  when the learning rate reached 0. Fresh mixes removed the memorising (the 20-point gap of every
+  earlier run), but the task is now much harder and 60 epochs is not enough.
+
+## 2026-09-26: Multi-label, 150 epochs (run 7): mAP 0.586, single clips back to 0.79
+
+- Same as run 6, only `--epochs 150` (the student's learning-rate/time idea: run 6 was still
+  improving when the learning rate reached 0).
+- **Result (last epoch):** mAP **0.586** (run 6: 0.456) | precision 0.896, recall **0.267** at 0.5
+  | single-clip top-1 **0.792**, level with the single-label model (0.790) while also handling
+  mixes and speech. Speech AP **0.935** on 5 unseen speakers.
+- Progress by epoch: mAP 0.375 (30), 0.487 (60), 0.549 (90), 0.577 (120), 0.586 (150): the gains
+  are shrinking, so more epochs alone won't give much more.
+- Easiest: clock_alarm 1.00, speech 0.93, hand_saw 0.92, brushing_teeth, crickets 0.90. Hardest:
+  pig 0.18, airplane 0.19, helicopter 0.20, fireworks 0.23, drinking_sipping 0.26. Airplane and
+  helicopter are both low, steady engine rumble: likely confused with each other and with engine.
+- Clean train: mAP 0.736, single top-1 0.963. With longer training a gap opens again (15 mAP
+  points), but smaller than the single-label 20.
+- Recall is still low at the 0.5 cut-off: the cut-off is the next thing to fix.
+
+## 2026-09-26: Can the percentages be trusted? Practice exam + calibration (run 8)
+
+- **Question (from the student):** if the site says "dog 30%" and marks it as heard, that looks
+  wrong to a person. Either the 30% is a wrong number, or "heard" is.
+- **Method:** retrained with fold 4 kept out as a **practice exam** (`--val-fold 4`, 1,280 training
+  clips instead of 1,705). Everything is chosen on fold 4; fold 5 is looked at once, at the end
+  (`src/calibrate.py`). Cost of the smaller training set: mAP 0.554 (vs 0.586), top-1 0.745 (vs 0.792).
+- **The raw scores are too modest.** On fold 4, answers of 0.3-0.4 were really right 57% of the
+  time, 0.4-0.5 63%, 0.5-0.6 73%.
+- **Correction:** new = sigmoid(1.181 x raw + 0.813), one pair of numbers for all sounds, fitted
+  on fold 4. **Checked on fold 5 it is honest:** 0.45 -> 45% really there, 0.55 -> 53%,
+  0.75 -> 73%, 0.97 -> 95%. It keeps the order of the scores, so mAP is unchanged (0.554).
+- **Cut-off by best F1 on fold 4:** raw 0.17 = corrected 0.26. On fold 5:
+
+  | "yes" when | precision | recall | F1 |
+  |---|---|---|---|
+  | raw >= 0.5 (before) | 0.860 | 0.251 | 0.389 |
+  | corrected >= 0.5 | 0.761 | 0.336 | 0.466 |
+  | corrected >= 0.26 (best F1) | 0.590 | 0.473 | 0.525 |
+
+- **What it means for the site:** show corrected (honest) percentages, and two levels: "heard"
+  at >= 50%, "maybe" between 26% and 50%. The numbers then mean what they say.
+
+## 2026-09-26: Borrowed correction on the 4-fold model (student's call): it fits
+
+- The student chose to reuse fold 4's choices on a model trained on folds 1-4. `multilabel_150`
+  already is that model (same settings), so no retraining: `python -m src.calibrate
+  multilabel_150 --from multilabel_val4`. Nothing chosen on fold 5; it only reports.
+- **The borrowed correction is honest on this model too** (fold 5): 0.34 -> 35% really there,
+  0.45 -> 46%, 0.55 -> 56%, 0.75 -> 76%, 0.97 -> 98% (one bin off: 0.65 -> 75%). The risk was that
+  a model trained on more data scales its scores differently; it didn't, noticeably.
+- **Fold 5, report only:** mAP 0.586 | corrected >= 0.50: precision 0.807, recall 0.369 |
+  corrected >= 0.26: precision 0.609, recall **0.500**, F1 **0.549**. Better than the 3-fold model
+  (F1 0.525) on every line: the extra fold of training data is kept, the honesty too.
+- **Decision:** the website will use `multilabel_150` with this calibration.json:
+  "heard" >= 50%, "maybe" 26-50% (corrected scores).

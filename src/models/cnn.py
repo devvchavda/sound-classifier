@@ -37,12 +37,15 @@ class ConvBlock(nn.Module):
 class SoundCNN(nn.Module):
     """(batch, 1, 64 mels, frames) -> (batch, n_classes) raw scores.
 
-    The output is raw scores, not probabilities: softmax is applied by the loss
-    during training and by `predict_proba` when we want probabilities.
+    The output is raw scores, not probabilities: the loss turns them into
+    probabilities during training, and `predict_proba` does it afterwards.
+    `multilabel` only changes that last step (softmax vs sigmoid); the layers
+    are the same either way.
     """
 
-    def __init__(self, n_classes: int, dropout: float = 0.5):
+    def __init__(self, n_classes: int, dropout: float = 0.5, multilabel: bool = False):
         super().__init__()
+        self.multilabel = multilabel
         # Filters double as the picture shrinks: early blocks need a few simple
         # detectors (edges, dots); deep blocks combine them into many more kinds.
         self.blocks = nn.Sequential(
@@ -74,8 +77,14 @@ class SoundCNN(nn.Module):
 
     @torch.no_grad()
     def predict_proba(self, x: torch.Tensor) -> torch.Tensor:
-        """Scores -> probabilities that sum to 1 (single-label: classes compete)."""
-        return torch.softmax(self(x), dim=1)
+        """Scores -> probabilities.
+
+        Single-label (softmax): the classes share 1 and compete for it.
+        Multi-label (sigmoid): each class gets its own 0-1, "is this sound in
+        there?", independent of all the others, so dog and speech can both be 0.9.
+        """
+        scores = self(x)
+        return torch.sigmoid(scores) if self.multilabel else torch.softmax(scores, dim=1)
 
 
 def shape_check() -> None:

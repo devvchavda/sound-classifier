@@ -49,13 +49,17 @@ Windows, Python 3.13, RTX 4060 (CUDA). Run everything from the repo root with th
 .venv/Scripts/python -m src.baseline               # MFCC + sklearn, 5-fold CV, figures -> reports/figures/
 .venv/Scripts/python -m src.models.cnn             # CNN shape check: one clip through the untrained model
 .venv/Scripts/python -m src.train --fold 5 --epochs 60 --gain 10 --name gain10   # train (current best); run folder -> runs/
+.venv/Scripts/python -m src.train_multilabel --fold 5 --epochs 150 --name multilabel_150   # multi-label (51 sounds, mixes)
+.venv/Scripts/python -m src.train_multilabel --fold 5 --val-fold 4 --epochs 150 --name multilabel_val4   # + fold 4 as practice exam
+.venv/Scripts/python -m src.calibrate multilabel_val4                              # honesty check, correction, cut-off (on fold 4)
+.venv/Scripts/python -m src.calibrate multilabel_150 --from multilabel_val4        # reuse them on the 4-fold model
 .venv/Scripts/python -m src.infer some_file.mp4    # sliding-window prediction on any audio/video file
 .venv/Scripts/python -m uvicorn server.app:app --port 8000   # web demo on http://localhost:8000 (SOUND_RUN=<run> picks the model)
 .venv/Scripts/python -m jupyter notebook notebooks/ # learning notebooks (01_explore: sound -> log-mel)
 ```
 
 Baseline MFCC features are cached in `data/cache/baseline_features.npz`, and the CNN's log-mel
-pictures in `data/cache/esc50_logmel.npz`. Delete both after changing `src/audio.py`, or training
+pictures in `data/cache/esc50_logmel.npz` (+ `custom_logmel.npz` for `data/custom/`). Delete them after changing `src/audio.py`, or training
 will keep using stale features.
 
 ffmpeg is not installed system-wide. `src/audio.load_any` uses the `imageio-ffmpeg` pip package to unpack
