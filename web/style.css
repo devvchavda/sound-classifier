@@ -410,3 +410,31 @@ summary { cursor: pointer; }
   .shell { border-radius: 2rem; }
   .url-row, .file-row { flex-direction: column; }
 }
+
+/* ---------- live page (live.html) and the link to it ---------- */
+.mode-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
+.mode-bar .modes { margin-bottom: 0; }
+.live-link, .back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font: 500 0.95rem var(--sans);
+  text-decoration: none;
+  transition: border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+.live-link:hover, .back-link:hover { border-color: rgba(204, 255, 0, 0.5); background: rgba(204, 255, 0, 0.04); }
+.live-link:focus-visible, .back-link:focus-visible { outline: 2px solid var(--lime); outline-offset: 3px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff5c5c; animation: pulse 2s infinite; }
+
+.live-controls { display: grid; gap: 0.9rem; }
+.live-row { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.camera { aspect-ratio: 16 / 9; object-fit: cover; transform: scaleX(-1); } /* mirrored, like a selfie */
+.mic-row { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0.75rem; margin: 0 0.25rem; }
+.mic-name { color: var(--text-2); font: 400 0.8rem var(--mono); }
+.mic-track { height: 6px; overflow: hidden; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
+.mic-fill { display: block; width: 0; height: 100%; border-radius: 3px; background: var(--lime); transition: width 0.4s var(--ease); }
+.timeline-wrap.is-static { cursor: default; }

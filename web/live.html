@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sound tagger: live</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="top">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>Sound tagger</span>
+      </a>
+      <span class="status" id="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="status-text">Connecting to the model…</span>
+      </span>
+    </header>
+
+    <main>
+      <!-- 1. Start -->
+      <section class="intro">
+        <h1>Live: what's making that sound right now?</h1>
+        <p class="lede">
+          Turn on your camera and microphone, then make some noise: talk, clap, type, or play a
+          dog video on your phone. Every half second the model hears the last 5 seconds.
+        </p>
+
+        <div class="glass input-card live-controls">
+          <div class="live-row">
+            <button type="button" class="analyze" id="start" disabled>Start camera + mic</button>
+            <a class="back-link" href="/">← YouTube or upload instead</a>
+          </div>
+          <p class="hint">
+            Nothing is recorded or saved: the server keeps only the last 5 seconds, in memory.
+            The camera is only shown to you; the model uses only the sound.
+          </p>
+          <p class="error" id="error" role="alert"></p>
+        </div>
+      </section>
+
+      <!-- 2. Camera + what it hears now -->
+      <section class="stage" id="stage" data-shape="wide" hidden>
+        <div class="glass player-card">
+          <video class="media camera" id="camera" autoplay muted playsinline></video>
+          <p class="hint" id="no-camera" hidden>No camera found, so it is listening with the microphone only.</p>
+          <div class="mic-row">
+            <span class="mic-name">Mic</span>
+            <span class="mic-track"><span class="mic-fill" id="mic-fill"></span></span>
+          </div>
+        </div>
+
+        <div class="glass now-card" aria-live="polite">
+          <p class="now-head">
+            <span class="now-title">Now hearing</span>
+            <span class="now-clock" id="now-clock"></span>
+          </p>
+          <p class="now-label is-unsure" id="now-label">Waiting for sound…</p>
+          <p class="now-prob" id="now-sub"></p>
+          <ol class="bars live" id="now-bars"></ol>
+          <p class="hint now-hint" id="now-hint">
+            For the first 5 seconds the model's window is still filling up; the part not heard yet
+            counts as silence. A sound shows up quickly, and stays up to 5 seconds after it stops,
+            because it is still inside the last 5 seconds.
+          </p>
+        </div>
+
+        <div class="glass timeline-card">
+          <div class="card-head">
+            <h2>Last 30 seconds</h2>
+            <p class="hint" id="timeline-hint"></p>
+          </div>
+          <div class="timeline-wrap is-static">
+            <div class="lanes" id="lanes"></div>
+          </div>
+          <div class="axis"><span>30 s ago</span><span>now</span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="common.js"></script>
+  <script src="live.js"></script>
+</body>
+</html>

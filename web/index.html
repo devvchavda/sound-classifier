@@ -33,9 +33,12 @@
         </p>
 
         <form class="glass input-card" id="form">
-          <div class="modes" role="tablist" aria-label="Input type">
-            <button type="button" role="tab" class="mode is-active" data-mode="url" aria-selected="true">YouTube link</button>
-            <button type="button" role="tab" class="mode" data-mode="file" aria-selected="false">Upload audio or video</button>
+          <div class="mode-bar">
+            <div class="modes" role="tablist" aria-label="Input type">
+              <button type="button" role="tab" class="mode is-active" data-mode="url" aria-selected="true">YouTube link</button>
+              <button type="button" role="tab" class="mode" data-mode="file" aria-selected="false">Upload audio or video</button>
+            </div>
+            <a class="live-link" href="live.html"><span class="live-dot" aria-hidden="true"></span>Live: camera + mic</a>
           </div>
 
           <div class="url-row" data-panel="url">
@@ -141,6 +144,7 @@
       </section>
     </main>
   </div>
+  <script src="common.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

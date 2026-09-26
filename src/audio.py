@@ -26,6 +26,12 @@ def load(path: str | Path, sr: int = SAMPLE_RATE) -> np.ndarray:
     return wave.astype(np.float32)
 
 
+def resample(wave: np.ndarray, orig_sr: int, sr: int = SAMPLE_RATE) -> np.ndarray:
+    """Audio already in memory (the live microphone) -> `sr` Hz, with the same
+    resampler `load` uses (librosa's default), so live audio matches training."""
+    return librosa.resample(wave.astype(np.float32), orig_sr=orig_sr, target_sr=sr).astype(np.float32)
+
+
 def load_any(path: str | Path, max_seconds: float | None = None) -> np.ndarray:
     """Any audio OR video file (mp3, m4a, mp4, webm, ...) -> same output as `load`.
 

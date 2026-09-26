@@ -12,6 +12,7 @@ ipykernel
 # web demo: server, audio/video decoding (bundled ffmpeg), YouTube audio
 fastapi
 uvicorn
+websockets  # uvicorn needs it for the live page (/ws/live)
 python-multipart
 imageio-ffmpeg
 yt-dlp

@@ -24,7 +24,8 @@ Output:
               for the web player's live "now hearing" panel
 Files shorter than 5 s are padded with silence, as ESC-50 does with short clips.
 
-The live camera mode will reuse `Tagger.predict`, so there is one copy of this.
+The live page uses `Tagger.score_window` (the last 5 s of the microphone), which
+goes through the same picture -> normalise -> score steps as `predict`.
 """
 
 import argparse
@@ -97,12 +98,8 @@ class Tagger:
         starts = self.window_starts(len(wave))
 
         # Each window becomes its own picture, exactly as each training clip did.
-        pictures = np.stack([audio.log_mel(wave[s:s + win]) for s in starts])
-        x = torch.from_numpy((pictures - self.norm["mean"]) / self.norm["std"]).unsqueeze(1)
-        probs = torch.cat([
-            self.scores(x[i:i + batch_size].float().to(self.device)).cpu()
-            for i in range(0, len(x), batch_size)
-        ]).numpy()  # (windows, classes)
+        probs = self._score_pictures(np.stack([audio.log_mel(wave[s:s + win]) for s in starts]),
+                                     batch_size)  # (windows, classes)
 
         best = probs.max(axis=0)
         overall = [{"label": self.labels[i], "prob": round(float(best[i]), 3),
@@ -125,6 +122,23 @@ class Tagger:
             "device": self.device.type,
             "seconds": round(time.time() - t0, 2),
         }
+
+    @torch.no_grad()
+    def score_window(self, wave: np.ndarray) -> np.ndarray:
+        """The last 5 s of a 16 kHz waveform -> (classes,) scores. For live mode.
+
+        Until 5 s have been heard, the missing start is silence, like ESC-50's short clips.
+        """
+        win = int(WINDOW_S * audio.SAMPLE_RATE)
+        wave = wave[-win:]
+        wave = np.pad(wave, (win - len(wave), 0))
+        return self._score_pictures(audio.log_mel(wave)[None])[0]
+
+    def _score_pictures(self, pictures: np.ndarray, batch_size: int = 64) -> np.ndarray:
+        """(n, mels, frames) log-mel pictures -> (n, classes) scores, normalised as in training."""
+        x = torch.from_numpy((pictures - self.norm["mean"]) / self.norm["std"]).unsqueeze(1)
+        return torch.cat([self.scores(x[i:i + batch_size].float().to(self.device)).cpu()
+                          for i in range(0, len(x), batch_size)]).numpy()
 
     def _lanes(self, probs, starts, duration) -> list[dict]:
         """One lane per sound that was heard or maybe somewhere, most confident first.

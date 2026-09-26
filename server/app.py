@@ -1,4 +1,5 @@
-"""Web demo: upload audio/video or paste a YouTube link -> sound probabilities.
+"""Web demo: upload audio/video or paste a YouTube link -> sound probabilities,
+plus a live page (camera + microphone, /live.html) fed over a WebSocket.
 
     .venv/Scripts/python -m uvicorn server.app:app --port 8000
     then open http://localhost:8000
@@ -16,13 +17,15 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+import numpy as np
+from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src import audio
 from src.datasets import ROOT, esc50_meta
-from src.infer import HEARD, Tagger
+from src.infer import HEARD, WINDOW_S, Tagger
 
 MAX_SECONDS = 600  # 10 min: longer uploads are cut, longer YouTube videos refused
 
@@ -116,6 +119,31 @@ def _analyze(path: Path) -> dict:
     result = tagger.predict(wave)
     result["truncated"] = result["duration"] >= MAX_SECONDS - 0.5  # only the start was used
     return result
+
+
+@app.websocket("/ws/live")
+async def live(ws: WebSocket):
+    """Live page: the browser sends raw microphone audio every 0.5 s; each time we
+    answer with the scores of the last 5 s (as long as a training clip).
+
+    First message: {"sample_rate": 48000} (the microphone's own rate). Then only
+    binary messages of float32 samples. The audio is kept in memory, only the
+    last 5 s, and never saved. Resampling to 16 kHz happens here, with the same
+    resampler as training (src/audio.py), not in the browser.
+    """
+    await ws.accept()
+    try:
+        sr = int((await ws.receive_json())["sample_rate"])
+        keep = int(WINDOW_S * sr)
+        heard = np.zeros(0, dtype=np.float32)
+        while True:
+            chunk = np.frombuffer(await ws.receive_bytes(), dtype=np.float32)
+            heard = np.concatenate([heard, chunk])[-keep:]
+            probs = await run_in_threadpool(lambda: tagger.score_window(audio.resample(heard, sr)))
+            await ws.send_json({"probs": np.round(probs, 3).tolist(),
+                                "filled": round(len(heard) / sr, 1)})
+    except WebSocketDisconnect:
+        pass
 
 
 # Last, so /api/* routes win over the static files.

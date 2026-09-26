@@ -343,3 +343,19 @@ failures and their fixes. The newest entry is at the bottom.
 - **Take-away for the talk:** a model trained on 2 M clips beats our 1,600-clip model where it
   knows the name. But without training it only speaks AudioSet's labels. Our model is small and
   trained for exactly these sounds, and it keeps up on this test.
+
+## 2026-09-26: Live page: camera + microphone, answers every 0.5 s
+
+- New page `web/live.html` (a "Live: camera + mic" button on the main page opens it). The webcam
+  is only shown; the sound goes to the server over a WebSocket (`/ws/live`) every 0.5 s. The
+  server keeps the last 5 s in memory (never saved) and answers with the scores of those 5 s,
+  using the same `Tagger` and correction as the file/YouTube page.
+- **Why 5 s:** the same length as every training clip, so the model sees the kind of picture it
+  learned from. The price: a sound appears quickly but stays up to ~5 s after it stops (it is
+  still inside the window). A 2 s window is the next thing to compare.
+- **The browser's mic "clean-up" is switched off** (noise suppression, echo cancellation,
+  automatic volume). It is built for video calls and removes everything but the voice, i.e.
+  exactly the dog, keyboard and clapping we want to hear.
+- **Resampling happens on the server**, with the same librosa resampler as training
+  (`audio.resample`), not in the browser: one audio path for training and demo.
+- Student's check: works live ("its good"); tweaks to come later.

@@ -3,12 +3,7 @@
 // Every sound has its own (corrected) score; the server sends two cut-offs with it:
 // heard (>= heard_cut) and maybe (>= maybe_cut). Below that a sound is not shown.
 
-const $ = (id) => document.getElementById(id);
-const pretty = (label) => label.replaceAll("_", " ");
-const pct = (p) => `${(p * 100).toFixed(1)}%`;
-const pct0 = (p) => `${Math.round(p * 100)}%`;
-const clock = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-const LIVE_ROWS = 5;
+// Helpers ($, pretty, pct, barRow, renderNow...) are in common.js, shared with the live page.
 
 let mode = "url";
 let chosenFile = null;
@@ -61,10 +56,10 @@ function renderGroups(info) {
 }
 
 // ---------- input mode ----------
-document.querySelectorAll(".mode").forEach((btn) =>
+document.querySelectorAll(".mode[data-mode]").forEach((btn) =>
   btn.addEventListener("click", () => {
     mode = btn.dataset.mode;
-    document.querySelectorAll(".mode").forEach((b) => {
+    document.querySelectorAll(".mode[data-mode]").forEach((b) => {
       b.classList.toggle("is-active", b === btn);
       b.setAttribute("aria-selected", b === btn);
     });
@@ -279,11 +274,6 @@ function clearResult() {
   for (const chip of chips.values()) chip.classList.remove("is-live", "is-heard");
 }
 
-// "heard", "maybe" or "" (not shown), using the cut-offs that came with this answer.
-function levelOf(p) {
-  return p >= result.heard_cut ? "heard" : p >= result.maybe_cut ? "maybe" : "";
-}
-
 function showResult(data) {
   result = data;
   $("source").textContent = data.source;
@@ -296,23 +286,6 @@ function showResult(data) {
   for (const row of data.overall)
     if (row.level === "heard") chips.get(row.label)?.classList.add("is-heard");
   update(true);
-}
-
-function barRow(label = "", prob = 0, level = "") {
-  const li = document.createElement("li");
-  li.innerHTML = `<span class="bar-label"></span>
-    <span class="bar-track"><span class="bar-fill"></span></span>
-    <span class="bar-value"></span>`;
-  setBar(li, label, prob, level);
-  return li;
-}
-
-// Solid lime = heard, faded lime = maybe, grey = below the maybe cut-off.
-function setBar(li, label, prob, level) {
-  li.className = "bar" + (level ? ` is-${level}` : "");
-  li.querySelector(".bar-label").textContent = pretty(label);
-  li.querySelector(".bar-fill").style.width = `${Math.max(prob * 100, 0.5)}%`;
-  li.querySelector(".bar-value").textContent = pct(prob);
 }
 
 function renderSummary(data) {
@@ -427,26 +400,7 @@ function update(force = false) {
   if (k === lastWindow && !force) return;
   lastWindow = k;
 
-  const probs = result.window_probs[k];
-  const order = probs.map((_, i) => i).sort((a, b) => probs[b] - probs[a]);
-  const heard = order.filter((i) => levelOf(probs[i]) === "heard");
-  const maybe = order.filter((i) => levelOf(probs[i]) === "maybe");
-
-  // Big line: every sound heard now; else the best "maybe"; else nothing.
-  const label = $("now-label");
-  if (heard.length) label.textContent = heard.map((i) => pretty(result.labels[i])).join(" + ");
-  else if (maybe.length) label.textContent = `maybe ${pretty(result.labels[maybe[0]])}`;
-  else label.textContent = "Nothing it recognises";
-  label.classList.toggle("is-unsure", heard.length === 0);
-  label.classList.toggle("is-many", heard.length > 1 || heard.length + maybe.length === 0);
-
-  const counts = [heard.length && `${heard.length} heard`, maybe.length && `${maybe.length} maybe`]
-    .filter(Boolean).join(", ");
-  $("now-sub").textContent = counts
-    ? `${counts} in this slice`
-    : `No sound scored ${pct0(result.maybe_cut)} or more in this slice.`;
-  [...$("now-bars").children].forEach((li, i) =>
-    setBar(li, result.labels[order[i]], probs[order[i]], levelOf(probs[order[i]])));
+  const heard = renderNow(result.window_probs[k], result.labels, result);
 
   for (const chip of chips.values()) chip.classList.remove("is-live");
   for (const i of heard) chips.get(result.labels[i])?.classList.add("is-live");
