@@ -312,3 +312,34 @@ failures and their fixes. The newest entry is at the bottom.
 - Download hiccup: one other link failed with YouTube's "Please sign in" (yt-dlp already the
   newest). Other links worked, so it was that video, not a block on our connection. Keep a
   local copy of the demo clip for the presentation in case YouTube blocks it on the day.
+
+## 2026-09-26: Our CNN vs PANNs (pretrained, inference only): 0.807 vs 0.821
+
+- **PANNs CNN14, 16 kHz version** (81 M weights, trained by its authors on AudioSet: 2 M YouTube
+  clips, 527 labels). Only run, never trained (`src/panns_compare.py`). Its own front end is
+  64 mel bands with a 10 ms step at 16 kHz, almost the same picture as ours (ours: ~390 k weights,
+  1,600 training clips).
+- **How it is compared (student's choice: label matching only, no training at all):** each
+  ESC-50 sound is matched by hand to the AudioSet labels that clearly name it (dog = Dog, Bark,
+  Howl...). Four sounds have no AudioSet name and are left out: drinking/sipping, mouse click, can
+  opening, washing machine. On the remaining 46 sounds (368 fold-5 clips) every model picks its
+  top sound among the same 46.
+
+  | model | top-1, same 368 clips |
+  |---|---|
+  | our CNN, single-label (`gain10`) | 0.807 |
+  | our CNN, multi-label (`multilabel_150`, the site's model) | 0.807 |
+  | PANNs CNN14 (pretrained, 2 M clips) | **0.821** |
+
+- **Why the gap is so small: much of it is names, not hearing.** On the 8 cricket clips PANNs said
+  "Insect" 3 times (a vaguer name that we matched to our *insects* sound, so it counts as wrong),
+  and on all 8 pouring-water clips it said "Liquid" (a broad name matched to nothing). Label
+  matching is the only way to use it without any training, and this is its price. The mapping was
+  fixed before looking at the results and was not changed afterwards, so the number stays honest.
+- **Where PANNs really hears better:** fireworks 1.00 vs our 0.25, airplane 0.88 vs 0.38, clapping
+  0.88 vs 0.38, pig 0.75 vs 0.25. **Where it really hears worse:** wind 0.00 vs our 0.62. PANNs
+  heard ESC-50's wind clips as "Vehicle", "Train" or "Siren": outdoor rumble sounds alike, and
+  our model has learned ESC-50's own wind recordings.
+- **Take-away for the talk:** a model trained on 2 M clips beats our 1,600-clip model where it
+  knows the name. But without training it only speaks AudioSet's labels. Our model is small and
+  trained for exactly these sounds, and it keeps up on this test.

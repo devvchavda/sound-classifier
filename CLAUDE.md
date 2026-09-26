@@ -53,6 +53,7 @@ Windows, Python 3.13, RTX 4060 (CUDA). Run everything from the repo root with th
 .venv/Scripts/python -m src.train_multilabel --fold 5 --val-fold 4 --epochs 150 --name multilabel_val4   # + fold 4 as practice exam
 .venv/Scripts/python -m src.calibrate multilabel_val4                              # honesty check, correction, cut-off (on fold 4)
 .venv/Scripts/python -m src.calibrate multilabel_150 --from multilabel_val4        # reuse them on the 4-fold model
+.venv/Scripts/python -m src.panns_compare     # our CNN vs PANNs CNN14 (inference only, label matching), fold 5
 .venv/Scripts/python -m src.infer some_file.mp4    # sliding-window prediction on any audio/video file
 .venv/Scripts/python -m uvicorn server.app:app --port 8000   # web demo on http://localhost:8000 (SOUND_RUN=<run> picks the model)
 .venv/Scripts/python -m jupyter notebook notebooks/ # learning notebooks (01_explore: sound -> log-mel)
@@ -61,6 +62,10 @@ Windows, Python 3.13, RTX 4060 (CUDA). Run everything from the repo root with th
 Baseline MFCC features are cached in `data/cache/baseline_features.npz`, and the CNN's log-mel
 pictures in `data/cache/esc50_logmel.npz` (+ `custom_logmel.npz` for `data/custom/`). Delete them after changing `src/audio.py`, or training
 will keep using stale features.
+
+PANNs needs `data/panns/Cnn14_16k_mAP=0.438.pth` (Zenodo record 3987831) and its label list at
+`~/panns_data/class_labels_indices.csv`: the `panns_inference` package reads it from there and tries to
+fetch it with `wget`, which Windows lacks, so download it by hand.
 
 ffmpeg is not installed system-wide. `src/audio.load_any` uses the `imageio-ffmpeg` pip package to unpack
 any audio/video file; resampling still goes through `load` (librosa), exactly as for training.

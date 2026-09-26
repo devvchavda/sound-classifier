@@ -15,3 +15,4 @@ uvicorn
 python-multipart
 imageio-ffmpeg
 yt-dlp
+panns_inference  # PANNs CNN14 model code (inference only, src/panns_compare.py)
