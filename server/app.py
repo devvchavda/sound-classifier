@@ -8,17 +8,24 @@ The model is loaded once at startup and stays on the GPU. Pick another trained
 run with the SOUND_RUN environment variable (default: multilabel_150). Scores are
 corrected with the run's calibration.json, and the page gets the two cut-offs
 (heard / maybe) with every answer.
+Every answer also compares, for each sound found, the 5 s slice where it scored
+highest with the training clip the model finds most like it (src/similar.py).
+That needs data/; without it the site works, minus the comparison.
+Each sound also has its own page (sound.html?label=dog), fed by /api/sound/<label>.
 Endpoints are plain `def`, so FastAPI runs them in a worker thread and the slow
 parts (ffmpeg, downloads, the model) don't block the server.
 """
 
+import io
+import json
 import os
 import shutil
 import tempfile
 from pathlib import Path
 
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+import soundfile
+from fastapi import FastAPI, File, HTTPException, Response, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -26,6 +33,8 @@ from pydantic import BaseModel
 from src import audio
 from src.datasets import ROOT, esc50_meta
 from src.infer import HEARD, WINDOW_S, Tagger
+from src.train import RUNS
+from src.similar import TrainingClips
 
 MAX_SECONDS = 600  # 10 min: longer uploads are cut, longer YouTube videos refused
 
@@ -33,6 +42,11 @@ MAX_SECONDS = 600  # 10 min: longer uploads are cut, longer YouTube videos refus
 ESC50_GROUPS = ["Animals", "Nature and water", "Human sounds", "Around the house", "Outdoors and city"]
 
 tagger = Tagger(os.environ.get("SOUND_RUN", "multilabel_150"))
+try:
+    clips = TrainingClips(tagger)
+except (FileNotFoundError, ValueError) as e:  # no data/ yet, or data/ changed since training
+    print(f"No training-clip comparison: {e}")
+    clips = None
 app = FastAPI(title="Sound tagger")
 
 
@@ -48,6 +62,22 @@ def _label_groups(labels: list[str]) -> list[dict]:
 
 
 GROUPS = _label_groups(tagger.labels)
+GROUP_OF = {label: g["name"] for g in GROUPS for label in g["labels"]}
+ORDER = [label for g in GROUPS for label in g["labels"]]  # page order, for previous / next
+
+
+def _json(path: Path) -> dict | None:
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+# Per-sound test results, if they exist. AP: on fold 5's fixed test mixes
+# (src/train_multilabel.py). PANNs: share of a sound's single fold-5 clips
+# named right, by our model and by PANNs (src/panns_compare.py), only shown
+# when that comparison was made with the model the site runs.
+AP = _json(RUNS / tagger.run / "per_class_ap.json") or {}
+_panns = _json(RUNS / "panns_compare.json") or {}
+_ours = [k for k in _panns.get("top1", {}) if k.startswith("our CNN")]
+PANNS = _panns.get("per_sound", {}) if _ours and _ours[-1] == f"our CNN ({tagger.run})" else {}
 
 
 @app.get("/api/info")
@@ -117,8 +147,54 @@ def _analyze(path: Path) -> dict:
     if len(wave) == 0:
         raise HTTPException(400, "That file has no audio in it.")
     result = tagger.predict(wave)
+    result["compare"] = clips.compare(wave, result) if clips else []
     result["truncated"] = result["duration"] >= MAX_SECONDS - 0.5  # only the start was used
     return result
+
+
+@app.get("/api/sound/{label}")
+def sound(label: str):
+    if label not in tagger.labels:
+        raise HTTPException(404, f"The model doesn't know a sound called {label!r}.")
+    k = ORDER.index(label)
+    ranked = sorted(AP, key=AP.get, reverse=True)
+    return {
+        "label": label,
+        "group": GROUP_OF[label],
+        "esc50": GROUP_OF[label] != "Added by us",
+        "counts": clips.counts[label] if clips else None,
+        "test_fold": tagger.config["fold"],
+        "practice_fold": tagger.config.get("val_fold"),
+        "ap": AP.get(label),
+        "ap_rank": ranked.index(label) + 1 if label in AP else None,
+        "ap_of": len(ranked),
+        "panns": PANNS.get(label),
+        "examples": [{"id": i, "name": clips.name(i)} for i in clips.typical(label)] if clips else [],
+        "previous": ORDER[k - 1],
+        "next": ORDER[(k + 1) % len(ORDER)],
+        "model": tagger.run,
+    }
+
+
+@app.get("/api/clip/{i}.png")
+def clip_png(i: int):
+    _check_clip(i)
+    return Response(clips.png(i), media_type="image/png",
+                    headers={"Cache-Control": "max-age=86400"})
+
+
+@app.get("/api/clip/{i}.wav")
+def clip_wav(i: int):
+    _check_clip(i)
+    buf = io.BytesIO()
+    soundfile.write(buf, clips.wav(i), audio.SAMPLE_RATE, format="WAV", subtype="PCM_16")
+    return Response(buf.getvalue(), media_type="audio/wav",
+                    headers={"Cache-Control": "max-age=86400"})
+
+
+def _check_clip(i: int):
+    if clips is None or not 0 <= i < len(clips.paths):
+        raise HTTPException(404, "No such training clip.")
 
 
 @app.websocket("/ws/live")

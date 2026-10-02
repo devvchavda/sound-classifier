@@ -359,3 +359,52 @@ failures and their fixes. The newest entry is at the bottom.
 - **Resampling happens on the server**, with the same librosa resampler as training
   (`audio.resample`), not in the browser: one audio path for training and demo.
 - Student's check: works live ("its good"); tweaks to come later.
+
+## 2026-10-02: "What the model saw": your clip next to the closest training clip
+
+- After an analysis, the site now shows two log-mel pictures side by side for each sound found
+  (top sound first; click another sound in the summary to switch). **Left:** the 5 s slice of
+  the upload where that sound scored highest, i.e. the exact picture the model judged.
+  **Right:** the training clip of that sound the model finds most like it.
+- **"Most like it" uses the model's own summary, not the pixels.** Just before its last layer the
+  CNN sums every picture up as 256 numbers (how strongly each detector fired): an *embedding*.
+  We pick the training clip whose 256 numbers point the most the same way (cosine similarity).
+  Why not compare pixels: a dog barking at second 1 and one barking at second 4 look different
+  pixel by pixel, but fire the same detectors. Test: a fold-5 dog clip (99% dog) was matched
+  to `2-116400-A-0.wav`; the barks sit at different moments, the stripe shapes match.
+- Only the run's training folds (1-4 for multilabel_150) are searched, never the test fold.
+- Both pictures use one fixed colour scale (-100 to +10 dB), so a quiet recording looks quiet;
+  stretching each picture to its own range would make any two look equally loud.
+
+## 2026-10-02: A page per sound, and `run.bat`
+
+- Clicking any sound on the site (the "What it can recognise" chips, a timeline row name) opens
+  `sound.html?label=<sound>`. It shows the sound's group, where its clips come from, how many were
+  trained on vs held out (fold 5), its test AP and rank among the 51 sounds, the PANNs comparison
+  where there is one, and three typical training clips as log-mel pictures you can play.
+- **"Typical" is chosen by the model, the same way as the comparison:** the training clips whose
+  embeddings are closest to the average embedding of all that sound's training clips, at most one
+  per original recording (ESC-50 cuts several clips from one recording, and three cuts of the same
+  dog would show one dog three times).
+- Examples for the talk: speech is the 2nd easiest sound (AP 0.93); dog is #32 of 51 (AP 0.52)
+  although every single fold-5 dog clip is named right: dogs get lost in *mixes*. Wind is #42
+  (AP 0.35), yet it's where we beat PANNs (62% vs 0%).
+- **Running the site is now one step:** double-click `run.bat` (or `python -m server`). It starts
+  the server and opens the browser once the model is loaded. It names the missing step instead of
+  crashing: no venv, no trained model, port already in use, or no data/ (the site then runs
+  without the pictures).
+
+## 2026-10-02: Demo example: speech + dog, both found (YouTube Short)
+
+- Link: https://youtube.com/shorts/GS0414hbQ_A, "How To Bark Like A Dog in 15 seconds"
+  (14.7 s, 11 slices, multilabel_150). Student's pick for the demo: it gets both sounds right.
+- **Across the whole clip:** speech **99.8%** heard, dog **72.7%** heard. Nothing else shown.
+- **Timeline:** speech heard all the way through (slices ~96-97%). Dog starts as *maybe* around
+  0:05-0:10 (33-43%) and becomes *heard* from 0:10 to the end (~59-62%), so the score rises as the
+  barking takes over. Two lanes overlapping in time = two sounds at once, which is what the
+  multi-label model (sigmoid, not softmax) was built for.
+- "What the model saw": the dog comparison uses the slice from 0:08, and its closest training dog
+  is `4-192236-A-0.wav`; for speech it's LibriSpeech speaker 174.
+- **Honest caveat for the talk:** the barking is a *person imitating* a dog. So the model hears
+  "something that sounds like a bark", not "a dog is present". It is a fair result (the sound
+  really is bark-like), and a good example of what a model trained only on sound can't know.

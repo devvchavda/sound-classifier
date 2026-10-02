@@ -12,9 +12,10 @@ let result = null;  // the server's answer for what is loaded now
 let lastWindow = -1;
 const chips = new Map(); // label -> its chip in "What it can recognise"
 
-// Whatever is playing, YouTube or a local file, is driven through these three.
+// Whatever is playing, YouTube or a local file, is driven through these four.
 let getTime = () => 0;
 let seek = () => {};
+let play = () => {};
 let isPlaying = () => false;
 
 // ---------- model status + the list of sounds it knows ----------
@@ -31,9 +32,18 @@ fetch("/api/info")
     $("status-text").textContent = "Server not reachable";
   });
 
+// A link to a sound's own page (sound.html).
+function soundLink(label, text = pretty(label)) {
+  const a = document.createElement("a");
+  a.href = `sound.html?label=${encodeURIComponent(label)}`;
+  a.textContent = text;
+  return a;
+}
+
 function renderGroups(info) {
   $("sounds-count").textContent =
-    `${info.classes} sounds in ${info.groups.length} groups. While a clip plays, the sounds it hears light up here.`;
+    `${info.classes} sounds in ${info.groups.length} groups. While a clip plays, the sounds it hears ` +
+    `light up here. Click one to see what it looks like and how well the model knows it.`;
   $("groups").replaceChildren(
     ...info.groups.map((group) => {
       const box = document.createElement("div");
@@ -45,7 +55,7 @@ function renderGroups(info) {
       for (const label of group.labels) {
         const chip = document.createElement("li");
         chip.className = "chip";
-        chip.textContent = pretty(label);
+        chip.append(soundLink(label));
         chips.set(label, chip);
         list.append(chip);
       }
@@ -189,6 +199,7 @@ function resetPlayers() {
   $("audio-player").hidden = true;
   getTime = () => 0;
   seek = () => {};
+  play = () => {};
   isPlaying = () => false;
 }
 
@@ -229,6 +240,7 @@ async function showYouTube(id, vertical) {
   // Until the player is ready these methods don't exist yet, hence the ?.
   getTime = () => yt?.getCurrentTime?.() ?? 0;
   seek = (t) => { yt?.seekTo?.(t, true); };
+  play = () => { yt?.playVideo?.(); };
   isPlaying = () => yt?.getPlayerState?.() === 1;
 }
 
@@ -241,6 +253,7 @@ function showFile(file) {
   setShape(isVideo ? "wide" : "audio");
   getTime = () => media.currentTime;
   seek = (t) => { media.currentTime = t; };
+  play = () => { media.play(); };
   isPlaying = () => !media.paused;
 }
 
@@ -271,6 +284,8 @@ function clearResult() {
   $("now").hidden = true;
   $("timeline-card").hidden = true;
   $("summary-card").hidden = true;
+  $("compare-card").hidden = true;
+  $("cmp-audio").pause();
   for (const chip of chips.values()) chip.classList.remove("is-live", "is-heard");
 }
 
@@ -283,6 +298,7 @@ function showResult(data) {
   $("now-bars").replaceChildren(...Array.from({ length: rows }, () => barRow()));
   renderSummary(data);
   renderTimeline(data);
+  if (data.compare.length) showCompare(data.compare[0].label);
   for (const row of data.overall)
     if (row.level === "heard") chips.get(row.label)?.classList.add("is-heard");
   update(true);
@@ -293,8 +309,8 @@ function renderSummary(data) {
   const maybe = data.overall.filter((row) => row.level === "maybe");
   $("heard-title").textContent = `Heard (${pct0(data.heard_cut)} or more)`;
   $("maybe-title").textContent = `Maybe (${pct0(data.maybe_cut)} to ${pct0(data.heard_cut)})`;
-  $("bars-heard").replaceChildren(...heard.map((row) => barRow(row.label, row.prob, row.level)));
-  $("bars-maybe").replaceChildren(...maybe.map((row) => barRow(row.label, row.prob, row.level)));
+  $("bars-heard").replaceChildren(...heard.map(summaryRow));
+  $("bars-maybe").replaceChildren(...maybe.map(summaryRow));
   $("heard-title").hidden = $("bars-heard").hidden = heard.length === 0;
   $("maybe-title").hidden = $("bars-maybe").hidden = maybe.length === 0;
   $("nothing").hidden = data.overall.length > 0;
@@ -306,6 +322,40 @@ function renderSummary(data) {
     (data.calibrated ? ", corrected scores" : "") +
     (data.truncated ? ". Only the first 10 minutes were used." : "");
   $("summary-card").hidden = false;
+}
+
+// A summary bar; when there is a comparison for its sound, clicking it shows that one.
+function summaryRow(row) {
+  const li = barRow(row.label, row.prob, row.level);
+  li.dataset.label = row.label;
+  if (result.compare.some((c) => c.label === row.label)) {
+    li.classList.add("is-pickable");
+    li.title = "Show what the model saw for this sound";
+    li.addEventListener("click", () => showCompare(row.label));
+  }
+  return li;
+}
+
+// ---------- what the model saw: your slice next to the closest training clip ----------
+function showCompare(label) {
+  const c = result.compare.find((x) => x.label === label);
+  const name = pretty(label);
+  $("compare-hint").textContent =
+    `Left: the 5 seconds of your clip where ${name} scored highest, the exact picture the model judged. ` +
+    `Right: of the ${c.match.of} training clips of ${name}, the one the model finds most like it ` +
+    `(closest in its own 256-number summary). Both use the same colour scale. ` +
+    `Click another sound under "Across the whole clip" to compare that one.`;
+  $("cmp-yours-cap").textContent =
+    `Your clip, ${clock(c.start)}–${clock(c.end)}: ${name} ${pct(c.prob)}${c.level === "maybe" ? " (maybe)" : ""}`;
+  $("cmp-yours").src = c.picture;
+  $("cmp-play").onclick = () => { seek(c.start); play(); };
+  $("cmp-train-cap").replaceChildren(`Training clip of ${name}: ${c.match.name}. `,
+    soundLink(label, `More about ${name} →`));
+  $("cmp-train").src = `/api/clip/${c.match.id}.png`;
+  $("cmp-audio").src = `/api/clip/${c.match.id}.wav`;
+  for (const li of document.querySelectorAll(".summary-card .bar"))
+    li.classList.toggle("is-picked", li.dataset.label === label);
+  $("compare-card").hidden = false;
 }
 
 // One lane per sound; a sound's segments are placed by time, so lanes overlap
@@ -326,9 +376,9 @@ function renderTimeline(data) {
   const lanes = data.timeline.map((lane) => {
     const row = document.createElement("div");
     row.className = "lane";
-    const name = document.createElement("span");
+    const name = soundLink(lane.label);
     name.className = "lane-label";
-    name.textContent = pretty(lane.label);
+    name.title = `About ${pretty(lane.label)}`;
     const track = document.createElement("div");
     track.className = "lane-track";
     for (const seg of lane.segments) {

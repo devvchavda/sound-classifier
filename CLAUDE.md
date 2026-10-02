@@ -55,7 +55,8 @@ Windows, Python 3.13, RTX 4060 (CUDA). Run everything from the repo root with th
 .venv/Scripts/python -m src.calibrate multilabel_150 --from multilabel_val4        # reuse them on the 4-fold model
 .venv/Scripts/python -m src.panns_compare     # our CNN vs PANNs CNN14 (inference only, label matching), fold 5
 .venv/Scripts/python -m src.infer some_file.mp4    # sliding-window prediction on any audio/video file
-.venv/Scripts/python -m uvicorn server.app:app --port 8000   # web demo on http://localhost:8000, live page /live.html (SOUND_RUN=<run> picks the model)
+run.bat                                            # web demo: double-click; opens http://localhost:8000 (live page /live.html, one page per sound /sound.html?label=dog)
+.venv/Scripts/python -m server --run multilabel_150 --port 8000   # same from a terminal (--no-browser to not open a tab)
 .venv/Scripts/python -m jupyter notebook notebooks/ # learning notebooks (01_explore: sound -> log-mel)
 ```
 

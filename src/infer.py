@@ -53,7 +53,8 @@ class Tagger:
         self.run = run
         self.labels = ckpt["labels"]
         self.norm = ckpt["norm"]
-        self.multilabel = ckpt["config"].get("multilabel", False)
+        self.config = ckpt["config"]
+        self.multilabel = self.config.get("multilabel", False)
         self.model = SoundCNN(len(self.labels), dropout=ckpt["config"].get("dropout", 0.0),
                               multilabel=self.multilabel)
         self.model.load_state_dict(ckpt["state_dict"])
@@ -87,15 +88,21 @@ class Tagger:
             starts.append(n_samples - win)
         return starts
 
+    def windows(self, wave: np.ndarray) -> tuple[np.ndarray, list[int]]:
+        """A file shorter than 5 s padded with silence (like ESC-50's short clips),
+        and the start sample of every window `predict` scores."""
+        win = int(WINDOW_S * audio.SAMPLE_RATE)
+        if len(wave) < win:
+            wave = np.pad(wave, (0, win - len(wave)))
+        return wave, self.window_starts(len(wave))
+
     @torch.no_grad()
     def predict(self, wave: np.ndarray, batch_size: int = 64) -> dict:
         t0 = time.time()
         sr = audio.SAMPLE_RATE
         win = int(WINDOW_S * sr)
         duration = len(wave) / sr
-        if len(wave) < win:
-            wave = np.pad(wave, (0, win - len(wave)))  # silence, like ESC-50's short clips
-        starts = self.window_starts(len(wave))
+        wave, starts = self.windows(wave)
 
         # Each window becomes its own picture, exactly as each training clip did.
         probs = self._score_pictures(np.stack([audio.log_mel(wave[s:s + win]) for s in starts]),
@@ -134,10 +141,20 @@ class Tagger:
         wave = np.pad(wave, (win - len(wave), 0))
         return self._score_pictures(audio.log_mel(wave)[None])[0]
 
+    @torch.no_grad()
+    def embed(self, pictures: np.ndarray, batch_size: int = 64) -> np.ndarray:
+        """(n, mels, frames) log-mel pictures -> (n, 256): how strongly each of the
+        model's 256 detectors fired, the summary its last layer decides from."""
+        return self._batched(lambda x: self.model.pool(self.model.blocks(x)), pictures, batch_size)
+
     def _score_pictures(self, pictures: np.ndarray, batch_size: int = 64) -> np.ndarray:
-        """(n, mels, frames) log-mel pictures -> (n, classes) scores, normalised as in training."""
+        """(n, mels, frames) log-mel pictures -> (n, classes) scores."""
+        return self._batched(self.scores, pictures, batch_size)
+
+    def _batched(self, fn, pictures: np.ndarray, batch_size: int) -> np.ndarray:
+        """Normalise the pictures as in training, then run `fn` on the GPU in batches."""
         x = torch.from_numpy((pictures - self.norm["mean"]) / self.norm["std"]).unsqueeze(1)
-        return torch.cat([self.scores(x[i:i + batch_size].float().to(self.device)).cpu()
+        return torch.cat([fn(x[i:i + batch_size].float().to(self.device)).cpu()
                           for i in range(0, len(x), batch_size)]).numpy()
 
     def _lanes(self, probs, starts, duration) -> list[dict]:

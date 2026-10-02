@@ -224,7 +224,7 @@ h3 { margin: 0 0 0.6rem; color: var(--text-2); font-size: 0.8rem; font-weight: 5
 }
 .stage[data-shape="vertical"] { grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); }
 .stage[data-shape="audio"] { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.timeline-card, .summary-card { grid-column: 1 / -1; }
+.timeline-card, .summary-card, .compare-card { grid-column: 1 / -1; }
 
 .player-card { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem; }
 .source { margin: 0 0.25rem; color: var(--text-2); font-size: 0.95rem; overflow-wrap: anywhere; }
@@ -321,7 +321,22 @@ video.media { max-height: 75vh; }
 .bar.is-maybe .bar-label::after { content: " · maybe"; color: var(--text-3); font-size: 0.8em; }
 .bar:not(.is-heard, .is-maybe) .bar-label { color: var(--text-3); }
 .bar-value { color: var(--text-2); font: 400 0.85rem var(--mono); text-align: right; }
-.summary-card, .timeline-card { padding: 1.75rem; }
+.summary-card, .timeline-card, .compare-card { padding: 1.75rem; }
+.bar.is-pickable { cursor: pointer; border-radius: 6px; }
+.bar.is-pickable:hover .bar-label { color: var(--lime); }
+.bar.is-picked .bar-label { color: var(--lime); text-decoration: underline; text-underline-offset: 3px; }
+
+/* ---------- what the model saw: two spectrograms side by side ---------- */
+.compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+.spec { display: flex; flex-direction: column; gap: 0.6rem; margin: 0; }
+.spec figcaption { color: var(--text-2); font-size: 0.9rem; }
+.spec img { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.spec audio { width: 100%; height: 2.25rem; }
+.spec-play {
+  align-self: flex-start; padding: 0.45rem 0.9rem; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--glass); color: var(--text); font: inherit;
+}
+.spec-play:hover { border-color: var(--lime); color: var(--lime); }
 .summary-card .bars { max-width: 44rem; margin-bottom: 1.5rem; }
 .meta { margin: 1.5rem 0 0; color: var(--text-3); font: 400 0.8rem var(--mono); }
 
@@ -332,6 +347,9 @@ video.media { max-height: 75vh; }
 .timeline-wrap { position: relative; cursor: pointer; }
 .lanes { display: grid; gap: 0.4rem; min-height: 2rem; }
 .lane { display: grid; grid-template-columns: var(--label-w) 1fr; gap: var(--lane-gap); align-items: center; }
+a.lane-label { color: inherit; text-decoration: none; }
+a.lane-label:hover, .spec figcaption a:hover { color: var(--lime); }
+.spec figcaption a { color: var(--text); }
 .lane-label { overflow: hidden; font-size: 0.9rem; text-overflow: ellipsis; white-space: nowrap; }
 .lane-track {
   position: relative;
@@ -385,6 +403,8 @@ summary { cursor: pointer; }
   font-size: 0.88rem;
   transition: background 0.25s var(--ease), color 0.25s var(--ease), border-color 0.25s var(--ease);
 }
+.chip a { color: inherit; text-decoration: none; }
+.chip:hover { border-color: var(--lime); }
 .chip.is-heard { border-color: rgba(204, 255, 0, 0.45); color: var(--text); }
 .chip.is-live { border-color: var(--lime); background: var(--lime); color: var(--black); font-weight: 600; }
 .caveat { max-width: 48rem; margin: 1.5rem 0 0; color: var(--text-3); font-size: 0.9rem; }
@@ -404,6 +424,8 @@ summary { cursor: pointer; }
   .stage[data-shape="vertical"] .yt-frame { width: min(22rem, 100%); margin: 0 auto; }
   .bar { grid-template-columns: 7rem 1fr 3.25rem; }
   .timeline-card { --label-w: 6.5rem; }
+  .compare-grid { grid-template-columns: minmax(0, 1fr); }
+  .facts { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 620px) {
   body { padding: 0.5rem; }
@@ -438,3 +460,14 @@ summary { cursor: pointer; }
 .mic-track { height: 6px; overflow: hidden; border-radius: 3px; background: rgba(255, 255, 255, 0.06); }
 .mic-fill { display: block; width: 0; height: 100%; border-radius: 3px; background: var(--lime); transition: width 0.4s var(--ease); }
 .timeline-wrap.is-static { cursor: default; }
+
+/* ---------- one sound's page (sound.html) ---------- */
+.sound-nav { display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; font-size: 0.9rem; }
+.sound-nav a { color: var(--text-2); text-decoration: none; }
+.sound-nav a:hover { color: var(--lime); }
+.eyebrow { margin: 0 0 0.75rem; color: var(--lime); font: 500 0.8rem var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.facts-card, .examples-card { padding: 1.75rem; }
+.facts { display: grid; grid-template-columns: 13rem minmax(0, 1fr); gap: 0.75rem 1.5rem; max-width: 56rem; margin: 0; }
+.facts dt { color: var(--text-2); font-size: 0.9rem; }
+.facts dd { margin: 0; }
+.examples { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1.25rem; }

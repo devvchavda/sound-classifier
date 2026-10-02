@@ -125,6 +125,25 @@
           <p class="hint" id="nothing" hidden></p>
           <p class="meta" id="meta"></p>
         </div>
+
+        <div class="glass compare-card" id="compare-card" hidden>
+          <div class="card-head">
+            <h2>What the model saw</h2>
+            <p class="hint" id="compare-hint"></p>
+          </div>
+          <div class="compare-grid">
+            <figure class="spec">
+              <figcaption id="cmp-yours-cap"></figcaption>
+              <img id="cmp-yours" alt="Log-mel spectrogram of your clip">
+              <button type="button" class="spec-play" id="cmp-play">Play this slice</button>
+            </figure>
+            <figure class="spec">
+              <figcaption id="cmp-train-cap"></figcaption>
+              <img id="cmp-train" alt="Log-mel spectrogram of the most similar training clip">
+              <audio id="cmp-audio" controls preload="none"></audio>
+            </figure>
+          </div>
+        </div>
       </section>
 
       <!-- 3. What the model knows -->
