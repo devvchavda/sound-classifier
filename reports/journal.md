@@ -408,3 +408,20 @@ failures and their fixes. The newest entry is at the bottom.
 - **Honest caveat for the talk:** the barking is a *person imitating* a dog. So the model hears
   "something that sounds like a bark", not "a dog is present". It is a fair result (the sound
   really is bark-like), and a good example of what a model trained only on sound can't know.
+
+## 2026-10-02: Demo example: "Cow Real Voice" (YouTube Short)
+
+- Link: https://youtube.com/shorts/Z9U8_XVTu4Y, "Cow Real Voice" (9.6 s, 6 slices,
+  multilabel_150). Student's verdict: the model did a great job here.
+- **Across the whole clip:** speech **69.8%** heard, crying baby **51.8%** heard, cow **29.1%** maybe.
+- **Timeline:** crying baby heard 0:00-0:03 and 0:05-0:06 (~52%), maybe in between. Speech is
+  heard only around 0:04-0:05 (70%), maybe elsewhere (~27-29%). Cow shows up only at the end,
+  0:07-0:10, as maybe (29%).
+- "What the model saw": closest training clips: crying baby `4-167077-C-20.wav` (slice from
+  0:00), cow `1-69422-A-3.wav` (slice from 0:05), speech LibriSpeech speaker 7976 (slice from 0:02).
+- **Crying baby is a false alarm** (student checked by listening): no baby in the clip. Speech
+  and the cow are right. The cow is only a *maybe* (29%), at the end of the clip.
+- A likely reason (not checked yet): a long, voiced, wavering moo and a baby's cry both look like
+  stacked bright bands that bend up and down in the log-mel picture. With only 32 training clips
+  per sound, the model can confuse the two. Good to show next to the dog Short: one clean
+  success and one honest miss.
